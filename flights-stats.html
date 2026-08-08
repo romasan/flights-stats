@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Статистика рейсов — Пулково (LED)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 20px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 24px; color: #1e293b; }
+  h1 small { font-weight: normal; font-size: 14px; color: #64748b; display: block; margin-top: 4px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  button {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: #1d4ed8; }
+  button:disabled { opacity: .6; cursor: wait; }
+  #statusBar {
+    font-size: 13px;
+    color: #64748b;
+    background: #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  #statusBar.error { background: #fee2e2; color: #b91c1c; }
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    padding: 20px;
+  }
+  .card h2 { font-size: 18px; margin-bottom: 4px; color: #1e293b; }
+  .card .subtitle { font-size: 12px; color: #64748b; margin-bottom: 14px; }
+  .chart-wrapper { position: relative; height: 340px; }
+  .chart-wrapper.tall { height: 460px; }
+  .chart-wrapper.heat { height: 280px; }
+  .heat-scale { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; color: #64748b; }
+  .heat-scale .grad { flex: 1; height: 10px; border-radius: 5px; }
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .sum-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .sum-card .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+  .sum-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .sum-card.departure .value { color: #2563eb; }
+  .sum-card.arrival .value { color: #7c3aed; }
+  .tables-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 900px) { .tables-grid { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { background: #f8fafc; color: #475569; font-weight: 600; position: sticky; top: 0; }
+  tbody tr:hover { background: #f8fafc; }
+  tfoot td { font-weight: 700; background: #f8fafc; }
+  .table-wrap { max-height: 420px; overflow: auto; border-radius: 8px; border: 1px solid #e2e8f0; }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  footer { margin-top: 20px; font-size: 12px; color: #94a3b8; text-align: center; }
+  .alert {
+    display: none;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .alert h3 { font-size: 15px; margin-bottom: 8px; }
+  .alert ul { margin: 0; padding-left: 22px; }
+  .alert li { margin: 4px 0; }
+  .alert .err-tag {
+    display: inline-block;
+    background: #fde68a;
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: 12px;
+    margin-left: 4px;
+  }
+  .loader { display: none; text-align: center; padding: 40px; }
+  .loader.show { display: block; }
+  .spinner {
+    border: 4px solid #e2e8f0;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    width: 40px; height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Статистика рейсов аэропорта Пулково
+      <small id="headerInfo">загрузка данных…</small>
+    </h1>
+    <div class="header-actions">
+      <div id="statusBar">Инициализация…</div>
+      <button id="refreshBtn" onclick="loadAll()">⟳ Обновить</button>
+    </div>
+  </header>
+
+  <div id="loader" class="loader">
+    <div class="spinner"></div>
+    <div>Загружаем и анализируем данные…</div>
+  </div>
+
+  <div id="content" style="display:none">
+    <div class="summary-cards" id="summaryCards"></div>
+
+    <div id="fetchErrors" class="alert"></div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <h2>✈ Вылеты</h2>
+        <div class="subtitle">Количество рейсов по фактической дате отправления (ATD)</div>
+        <div class="chart-wrapper"><canvas id="departureChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>🛬 Прилёты</h2>
+        <div class="subtitle">Количество рейсов по фактической дате прибытия (ATA)</div>
+        <div class="chart-wrapper"><canvas id="arrivalChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <h2>🌡 Вероятность отмены вылета</h2>
+        <div class="subtitle">Доля отменённых рейсов по дню недели и часу суток (плановое время STD). Дни без статистики исключены.</div>
+        <div class="chart-wrapper heat"><canvas id="cancelDepartureChart"></canvas></div>
+        <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
+      </div>
+      <div class="card">
+        <h2>🌡 Вероятность отмены прилёта</h2>
+        <div class="subtitle">Доля отменённых рейсов по дню недели и часу суток (плановое время STA). Дни без статистики исключены.</div>
+        <div class="chart-wrapper heat"><canvas id="cancelArrivalChart"></canvas></div>
+        <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
+      </div>
+    </div>
+
+    <div class="tables-grid">
+      <div class="card">
+        <h2>Таблица вылетов</h2>
+        <div class="subtitle">Количество рейсов по дням и статусам</div>
+        <div class="table-wrap" id="departureTableWrap"></div>
+      </div>
+      <div class="card">
+        <h2>Таблица прилётов</h2>
+        <div class="subtitle">Количество рейсов по дням и статусам</div>
+        <div class="table-wrap" id="arrivalTableWrap"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Источник данных: <a href="https://w.nbauer.ru/flights/" target="_blank" rel="noopener">w.nbauer.ru/flights/</a></footer>
+</div>
+
+<script>
+'use strict';
+
+const BASE = 'https://w.nbauer.ru/flights/';
+
+const KEY_STATUS = {
+  departure: 'OD_STATUS_RU',
+  arrival:   'OA_STATUS_RU'
+};
+const KEY_ACTUAL = {
+  departure: 'OD_ATD',
+  arrival:   'OA_ATA'
+};
+const KEY_PLAN = {
+  departure: 'OD_STD',
+  arrival:   'OA_STA'
+};
+
+const PRIORITY_STATUS = { 'Отправлен': 0, 'Прибыл': 0, 'Задержан': 1, 'Отмена': 2 };
+const NO_STATUS = 'Без статуса';
+
+const DOW_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+const FIXED_COLORS = {
+  'Отправлен': '#16a34a',
+  'Прибыл':    '#16a34a',
+  'Задержан':  '#f59e0b',
+  'Отмена':    '#dc2626',
+  'Без статуса': '#94a3b8'
+};
+const PALETTE = [
+  '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16',
+  '#f97316', '#14b8a6', '#a855f7', '#eab308',
+  '#3b82f6', '#ef4444', '#22c55e', '#6366f1'
+];
+
+const fmtDate = s => {
+  const m = String(s || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+};
+
+const statusRu = (flight, type) => {
+  const s = flight[KEY_STATUS[type]];
+  if (typeof s !== 'string' || s.trim() === '') return NO_STATUS;
+  return s.trim();
+};
+
+const actualDate = (flight, type) => {
+  const a = flight[KEY_ACTUAL[type]];
+  const p = flight[KEY_PLAN[type]];
+  return fmtDate(a) || fmtDate(p);
+};
+
+const fmtDisplayDate = d => {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+};
+
+const fmtLogDate = s => `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
+
+async function fetchList() {
+  const resp = await fetch(BASE);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const html = await resp.text();
+  const files = [];
+  const seen = new Set();
+  for (const m of html.matchAll(/(arrival|departure)-(\d{8})\.json/gi)) {
+    const file = m[0];
+    if (seen.has(file)) continue;
+    seen.add(file);
+    files.push({ type: m[1].toLowerCase(), date: m[2], file });
+  }
+  files.sort((a, b) => a.date.localeCompare(b.date));
+  return files;
+}
+
+function parseFetchLog(text) {
+  const failedDays = [];
+  let cur = null;
+
+  const flush = () => {
+    if (!cur) return;
+    if (cur.errors.length) failedDays.push(cur);
+    cur = null;
+  };
+
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    const dateMatch = line.match(/Начинаем загрузку данных за (\d{8})/);
+    if (dateMatch) {
+      flush();
+      cur = { date: dateMatch[1], errors: [] };
+      continue;
+    }
+    if (!cur) continue;
+    if (line.includes('Загрузка прилетов')) {
+      cur.section = 'arrival';
+      continue;
+    }
+    if (line.includes('Загрузка вылетов')) {
+      cur.section = 'departure';
+      continue;
+    }
+    if (line.startsWith('❌')) {
+      const errType = line.includes('прилет')
+        ? 'arrival'
+        : line.includes('вылет')
+          ? 'departure'
+          : cur.section || 'unknown';
+      if (!cur.errors.includes(errType)) cur.errors.push(errType);
+    }
+  }
+  flush();
+
+  return failedDays;
+}
+
+async function loadFetchLog() {
+  try {
+    const resp = await fetch(BASE + 'fetch_flights.log');
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    return parseFetchLog(text);
+  } catch (err) {
+    console.error('Failed to load fetch log:', err);
+    return [];
+  }
+}
+
+async function loadType(files, type) {
+  const list = files.filter(f => f.type === type);
+  const results = await Promise.allSettled(list.map(f =>
+    fetch(BASE + f.file).then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+  ));
+  const flights = [];
+  const failedDates = new Set();
+  let errors = 0;
+  results.forEach((res, i) => {
+    if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+      for (const flight of res.value) flights.push({ ...flight, _fileDate: list[i].date });
+    } else {
+      errors++;
+      failedDates.add(list[i].date);
+      console.error('Failed to load:', list[i].file, res.reason);
+    }
+  });
+  return { flights, errors, total: list.length, failedDates };
+}
+
+function aggregate(flights, type) {
+  const byDate = new Map();
+  for (const f of flights) {
+    const date = actualDate(f, type);
+    if (!date) continue;
+    const status = statusRu(f, type);
+    if (!byDate.has(date)) byDate.set(date, new Map());
+    const m = byDate.get(date);
+    m.set(status, (m.get(status) || 0) + 1);
+  }
+  const dates = [...byDate.keys()].sort();
+
+  const statusSet = new Set();
+  for (const d of dates) for (const st of byDate.get(d).keys()) statusSet.add(st);
+  const statuses = [...statusSet];
+  statuses.sort((a, b) => {
+    const pa = PRIORITY_STATUS[a] !== undefined ? PRIORITY_STATUS[a] : 3;
+    const pb = PRIORITY_STATUS[b] !== undefined ? PRIORITY_STATUS[b] : 3;
+    if (pa !== pb) return pa - pb;
+    if (a === NO_STATUS) return 1;
+    if (b === NO_STATUS) return -1;
+    return a.localeCompare(b, 'ru');
+  });
+
+  return { dates, statuses, byDate };
+}
+
+function colorFor(status, index) {
+  return FIXED_COLORS[status] || PALETTE[index % PALETTE.length];
+}
+
+function makeChart(canvasId, agg, typeName) {
+  const datasets = agg.statuses.map((st, i) => ({
+    label: st,
+    data: agg.dates.map(d => agg.byDate.get(d).get(st) || 0),
+    borderColor: colorFor(st, i),
+    backgroundColor: colorFor(st, i),
+    borderWidth: 2,
+    tension: 0.25,
+    pointRadius: 3.5,
+    pointHoverRadius: 6,
+    pointBackgroundColor: colorFor(st, i)
+  }));
+
+  return new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels: agg.dates.map(fmtDisplayDate), datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 14, usePointStyle: true, font: { size: 12 } } },
+        tooltip: {
+          callbacks: {
+            title: items => items.length ? 'Дата: ' + items[0].label : ''
+          }
+        },
+        datalabels: {
+          color: '#334155',
+          font: { size: 9.5, weight: 'bold' },
+          anchor: 'end',
+          align: 'top',
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          formatter: v => (v > 0 ? v : '')
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+          title: { display: true, text: 'Кол-во рейсов' }
+        },
+        x: {
+          title: { display: true, text: 'Дата (день)' },
+          ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } }
+        }
+      }
+    }
+  });
+}
+
+function renderSummary(aggDeparture, aggArrival) {
+  const totalDep = aggDeparture.dates.reduce((s, d) => {
+    let sum = 0;
+    for (const st of aggDeparture.statuses) sum += aggDeparture.byDate.get(d).get(st) || 0;
+    return s + sum;
+  }, 0);
+  const totalArr = aggArrival.dates.reduce((s, d) => {
+    let sum = 0;
+    for (const st of aggArrival.statuses) sum += aggArrival.byDate.get(d).get(st) || 0;
+    return s + sum;
+  }, 0);
+
+  const cards = `
+    <div class="sum-card departure">
+      <div class="label">Дней (вылеты)</div>
+      <div class="value">${aggDeparture.dates.length}</div>
+    </div>
+    <div class="sum-card departure">
+      <div class="label">Всего вылетов</div>
+      <div class="value">${totalDep}</div>
+    </div>
+    <div class="sum-card arrival">
+      <div class="label">Дней (прилёты)</div>
+      <div class="value">${aggArrival.dates.length}</div>
+    </div>
+    <div class="sum-card arrival">
+      <div class="label">Всего прилётов</div>
+      <div class="value">${totalArr}</div>
+    </div>`;
+  document.getElementById('summaryCards').innerHTML = cards;
+}
+
+function renderFetchErrors(failedDays) {
+  const el = document.getElementById('fetchErrors');
+  if (!failedDays.length) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  const items = failedDays.map(d => {
+    const tags = d.errors.map(t =>
+      t === 'arrival'   ? '<span class="err-tag">прилёты</span>'
+    : t === 'departure' ? '<span class="err-tag">вылеты</span>'
+    :                     '<span class="err-tag">общая ошибка</span>'
+    ).join('');
+    return `<li><strong>${fmtLogDate(d.date)}</strong>${tags}</li>`;
+  }).join('');
+  el.innerHTML = `<h3>⚠ Не удалось получить статистику за ${failedDays.length} ${pluralDays(failedDays.length)}</h3><ul>${items}</ul>`;
+  el.style.display = 'block';
+}
+
+function pluralDays(n) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'день';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'дня';
+  return 'дней';
+}
+
+function getExcludedDates(failedLogDays, loadResult) {
+  const excluded = new Set(loadResult.failedDates);
+  for (const d of failedLogDays) {
+    if (d.errors.includes('unknown')) {
+      excluded.add(d.date);
+    } else {
+      for (const err of d.errors) {
+        if (err === 'arrival' || err === 'departure') excluded.add(d.date);
+      }
+    }
+  }
+  return excluded;
+}
+
+function parsePlanTime(flight, type) {
+  const raw = flight[KEY_PLAN[type]] || flight[KEY_ACTUAL[type]] || '';
+  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const year = +m[1], month = +m[2] - 1, day = +m[3];
+  const dow = (new Date(year, month, day).getDay() + 6) % 7; // Пн = 0 … Вс = 6
+  return { hour: +m[4], minute: +m[5], dow };
+}
+
+function buildCancelHeat(flights, type, excludedDates) {
+  const cells = new Map(); // key: dow*24 + hour → { total, cancelled }
+  for (const f of flights) {
+    if (excludedDates.has(f._fileDate)) continue;
+    const t = parsePlanTime(f, type);
+    if (!t) continue;
+    const key = t.dow * 24 + t.hour;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { total: 0, cancelled: 0 };
+      cells.set(key, cell);
+    }
+    cell.total++;
+    if (statusRu(f, type).trim() === 'Отмена') cell.cancelled++;
+  }
+
+  const data = [];
+  for (let dow = 0; dow < 7; dow++) {
+    for (let hour = 0; hour < 24; hour++) {
+      const cell = cells.get(dow * 24 + hour);
+      const total = cell ? cell.total : 0;
+      const cancelled = cell ? cell.cancelled : 0;
+      data.push({
+        x: hour,
+        y: dow,
+        v: total ? cancelled / total : null,
+        total,
+        cancelled
+      });
+    }
+  }
+  return data;
+}
+
+function heatColor(p, total) {
+  if (!total) return 'rgba(226,232,240,0.5)';
+  if (!p) return '#e8f5e9';
+  return `hsl(${Math.round(120 * (1 - p))}, 70%, 45%)`;
+}
+
+function makeHeatmap(canvasId, data) {
+  // Фиксированный размер ячеек 15×15px
+  const cellWidth = () => 15;
+  const cellHeight = () => 15;
+
+  return new Chart(document.getElementById(canvasId), {
+    type: 'matrix',
+    data: {
+      datasets: [{
+        label: 'Вероятность отмены',
+        data,
+        borderColor: 'rgba(255,255,255,0.7)',
+        borderWidth: 0.6,
+        backgroundColor: ctx => {
+          const r = ctx.raw;
+          return heatColor(r && r.v, r && r.total);
+        },
+        width: cellWidth,
+        height: cellHeight,
+        borderRadius: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => {
+              const r = items[0] && items[0].raw;
+              if (!r) return '';
+              return `${DOW_NAMES[r.y]}, ${String(r.x).padStart(2, '0')}:00`;
+            },
+            label: ctx => {
+              const r = ctx.raw;
+              if (!r || !r.total) return 'Нет данных';
+              return `Отмен: ${r.cancelled} из ${r.total} (${(100 * r.v).toFixed(1)}%)`;
+            }
+          }
+        },
+        datalabels: { display: false }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          offset: true,
+          title: { display: true, text: 'Час суток' },
+          min: -0.5,
+          max: 23.5,
+          ticks: {
+            stepSize: 2,
+            callback: v => `${v}:00`,
+            font: { size: 10 }
+          }
+        },
+        y: {
+          type: 'linear',
+          reverse: true,
+          title: { display: true, text: 'День недели' },
+          min: -0.5,
+          max: 6.5,
+          ticks: {
+            stepSize: 1,
+            callback: v => DOW_NAMES[v],
+            font: { size: 11 }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(agg, typeName, wrapId) {
+  const totals = {};
+  for (const st of agg.statuses) totals[st] = 0;
+  const rowTotals = {};
+  for (const d of agg.dates) {
+    let sum = 0;
+    for (const st of agg.statuses) {
+      const v = agg.byDate.get(d).get(st) || 0;
+      totals[st] += v;
+      sum += v;
+    }
+    rowTotals[d] = sum;
+  }
+
+  const head = `<tr><th>Дата</th>` + agg.statuses.map(st =>
+    `<th><span class="legend-dot" style="background:${colorFor(st, agg.statuses.indexOf(st))}"></span>${st}</th>`
+  ).join('') + `<th>Итого</th></tr>`;
+
+  const body = agg.dates.map(d => {
+    const tds = agg.statuses.map(st => `<td>${agg.byDate.get(d).get(st) || 0}</td>`).join('');
+    return `<tr><td>${fmtDisplayDate(d)}</td>${tds}<td><strong>${rowTotals[d]}</strong></td></tr>`;
+  }).join('');
+
+  const foot = `<tr><td><strong>Итого</strong></td>` + agg.statuses.map(st =>
+    `<td><strong>${totals[st]}</strong></td>`
+  ).join('') + `<td><strong>${agg.dates.reduce((s, d) => s + rowTotals[d], 0)}</strong></td></tr>`;
+
+  document.getElementById(wrapId).innerHTML =
+    `<table><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
+async function loadAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  const loader = document.getElementById('loader');
+  const content = document.getElementById('content');
+  const statusBar = document.getElementById('statusBar');
+  const headerInfo = document.getElementById('headerInfo');
+  content.style.display = 'none';
+  loader.classList.add('show');
+  statusBar.className = '';
+  statusBar.textContent = 'Получаем список файлов…';
+
+  try {
+    const files = await fetchList();
+    statusBar.textContent = `Найдено ${files.length} файлов. Загружаем JSON и лог…`;
+
+    const [dep, arr, logFailDays] = await Promise.all([
+      loadType(files, 'departure'),
+      loadType(files, 'arrival'),
+      loadFetchLog()
+    ]);
+
+    const aggDep = aggregate(dep.flights, 'departure');
+    const aggArr = aggregate(arr.flights, 'arrival');
+
+    const excludedDep = getExcludedDates(logFailDays, dep);
+    const excludedArr = getExcludedDates(logFailDays, arr);
+
+    renderSummary(aggDep, aggArr);
+    renderFetchErrors(logFailDays);
+    renderTable(aggDep, 'departure', 'departureTableWrap');
+    renderTable(aggArr, 'arrival', 'arrivalTableWrap');
+
+    makeChart('departureChart', aggDep, 'departure');
+    makeChart('arrivalChart', aggArr, 'arrival');
+    makeHeatmap('cancelDepartureChart', buildCancelHeat(dep.flights, 'departure', excludedDep));
+    makeHeatmap('cancelArrivalChart', buildCancelHeat(arr.flights, 'arrival', excludedArr));
+
+    const now = new Date();
+    headerInfo.textContent =
+      `данные за ${aggDep.dates.length} дней вылетов и ${aggArr.dates.length} дней прилётов · обновлено ${now.toLocaleString('ru-RU')}`;
+
+    const warnParts = [];
+    if (dep.errors) warnParts.push(`вылеты: ${dep.errors}/${dep.total} файлов не загружено`);
+    if (arr.errors) warnParts.push(`прилёты: ${arr.errors}/${arr.total} файлов не загружено`);
+    if (logFailDays.length) {
+      const dates = logFailDays.map(d => fmtLogDate(d.date)).join(', ');
+      warnParts.push(`лог: ошибки ${logFailDays.length} ${pluralDays(logFailDays.length)} (${dates})`);
+    }
+    statusBar.className = warnParts.length ? 'error' : '';
+    statusBar.textContent = warnParts.length
+      ? '⚠ ' + warnParts.join('; ')
+      : `Готово: ${dep.total} + ${arr.total} файлов, ${dep.flights.length + arr.flights.length} рейсов обработано`;
+
+    loader.classList.remove('show');
+    content.style.display = 'block';
+  } catch (err) {
+    console.error(err);
+    loader.classList.remove('show');
+    statusBar.className = 'error';
+    statusBar.textContent = 'Ошибка: ' + err.message;
+    headerInfo.textContent = 'не удалось загрузить данные';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadAll);
+</script>
+</body>
+</html>
