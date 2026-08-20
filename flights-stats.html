@@ -27,18 +27,6 @@
   h1 { font-size: 24px; color: #1e293b; }
   h1 small { font-weight: normal; font-size: 14px; color: #64748b; display: block; margin-top: 4px; }
   .header-actions { display: flex; gap: 10px; align-items: center; }
-  button {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background .15s;
-  }
-  button:hover { background: #1d4ed8; }
-  button:disabled { opacity: .6; cursor: wait; }
   #statusBar {
     font-size: 13px;
     color: #64748b;
@@ -140,7 +128,6 @@
     </h1>
     <div class="header-actions">
       <div id="statusBar">Инициализация…</div>
-      <button id="refreshBtn" onclick="loadAll()">⟳ Обновить</button>
     </div>
   </header>
 
@@ -659,8 +646,6 @@ function renderTable(agg, typeName, wrapId) {
 }
 
 async function loadAll() {
-  const btn = document.getElementById('refreshBtn');
-  btn.disabled = true;
   const loader = document.getElementById('loader');
   const content = document.getElementById('content');
   const statusBar = document.getElementById('statusBar');
@@ -703,10 +688,6 @@ async function loadAll() {
     const warnParts = [];
     if (dep.errors) warnParts.push(`вылеты: ${dep.errors}/${dep.total} файлов не загружено`);
     if (arr.errors) warnParts.push(`прилёты: ${arr.errors}/${arr.total} файлов не загружено`);
-    if (logFailDays.length) {
-      const dates = logFailDays.map(d => fmtLogDate(d.date)).join(', ');
-      warnParts.push(`лог: ошибки ${logFailDays.length} ${pluralDays(logFailDays.length)} (${dates})`);
-    }
     statusBar.className = warnParts.length ? 'error' : '';
     statusBar.textContent = warnParts.length
       ? '⚠ ' + warnParts.join('; ')
@@ -720,8 +701,6 @@ async function loadAll() {
     statusBar.className = 'error';
     statusBar.textContent = 'Ошибка: ' + err.message;
     headerInfo.textContent = 'не удалось загрузить данные';
-  } finally {
-    btn.disabled = false;
   }
 }
 
