@@ -59,9 +59,15 @@
   .heat-scale .grad { flex: 1; height: 10px; border-radius: 5px; }
   .summary-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 20px;
+  }
+  @media (max-width: 900px) {
+    .summary-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .summary-cards { grid-template-columns: 1fr; }
   }
   .sum-card {
     background: #fff;
@@ -71,8 +77,11 @@
   }
   .sum-card .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
   .sum-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .sum-card .pct { font-size: 12px; font-weight: 600; color: #94a3b8; margin-left: 4px; }
   .sum-card.departure .value { color: #2563eb; }
   .sum-card.arrival .value { color: #7c3aed; }
+  .sum-card.cancel .value { color: #dc2626; }
+  .sum-card.delay .value { color: #f59e0b; }
   .tables-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -569,6 +578,14 @@ function totalFlights(agg) {
   return sum;
 }
 
+function countStatus(agg, status) {
+  let sum = 0;
+  for (const d of agg.dates) {
+    sum += agg.byDate.get(d).get(status) || 0;
+  }
+  return sum;
+}
+
 function getExcludedDates(failedLogDays, loadResult) {
   const excluded = new Set(loadResult.failedDates);
   for (const d of failedLogDays) {
@@ -787,26 +804,52 @@ const ErrorState = ({ message }) => html`
   </div>
 `;
 
-const SummaryCards = ({ aggDep, aggArr }) => html`
-  <div class="summary-cards">
-    <div class="sum-card departure">
-      <div class="label">Дней (вылеты)</div>
-      <div class="value">${aggDep.dates.length}</div>
+const pctOf = (count, total) => (total > 0 ? (100 * count / total).toFixed(1) : '0.0');
+
+const SummaryCards = ({ aggDep, aggArr }) => {
+  const totalDep = totalFlights(aggDep);
+  const totalArr = totalFlights(aggArr);
+  const canceledDep = countStatus(aggDep, 'Отмена');
+  const canceledArr = countStatus(aggArr, 'Отмена');
+  const delayedDep = countStatus(aggDep, 'Задержан');
+  const delayedArr = countStatus(aggArr, 'Задержан');
+  return html`
+    <div class="summary-cards">
+      <div class="sum-card departure">
+        <div class="label">Дней (вылеты)</div>
+        <div class="value">${aggDep.dates.length}</div>
+      </div>
+      <div class="sum-card departure">
+        <div class="label">Всего вылетов</div>
+        <div class="value">${totalDep}</div>
+      </div>
+      <div class="sum-card arrival">
+        <div class="label">Дней (прилёты)</div>
+        <div class="value">${aggArr.dates.length}</div>
+      </div>
+      <div class="sum-card arrival">
+        <div class="label">Всего прилётов</div>
+        <div class="value">${totalArr}</div>
+      </div>
+      <div class="sum-card departure cancel">
+        <div class="label">Отменено вылетов</div>
+        <div class="value">${canceledDep}<span class="pct">${pctOf(canceledDep, totalDep)}%</span></div>
+      </div>
+      <div class="sum-card arrival cancel">
+        <div class="label">Отменено прилётов</div>
+        <div class="value">${canceledArr}<span class="pct">${pctOf(canceledArr, totalArr)}%</span></div>
+      </div>
+      <div class="sum-card departure delay">
+        <div class="label">Задержано вылетов</div>
+        <div class="value">${delayedDep}<span class="pct">${pctOf(delayedDep, totalDep)}%</span></div>
+      </div>
+      <div class="sum-card arrival delay">
+        <div class="label">Задержано прилётов</div>
+        <div class="value">${delayedArr}<span class="pct">${pctOf(delayedArr, totalArr)}%</span></div>
+      </div>
     </div>
-    <div class="sum-card departure">
-      <div class="label">Всего вылетов</div>
-      <div class="value">${totalFlights(aggDep)}</div>
-    </div>
-    <div class="sum-card arrival">
-      <div class="label">Дней (прилёты)</div>
-      <div class="value">${aggArr.dates.length}</div>
-    </div>
-    <div class="sum-card arrival">
-      <div class="label">Всего прилётов</div>
-      <div class="value">${totalFlights(aggArr)}</div>
-    </div>
-  </div>
-`;
+  `;
+};
 
 const FetchErrors = ({ failedDays, fallbackDep = 0, fallbackArr = 0 }) => {
   const hasFailed = failedDays.length > 0;

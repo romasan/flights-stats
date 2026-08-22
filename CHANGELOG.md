@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-08-22 — Added summary cards showing total canceled/delayed departures and arrivals with percentages, computed using the selected delay threshold.
+
 ## 2026-08-22 — Heatmaps for delay/cancellation now group flights by planned time (STD/STA) instead of actual time; fallback to actual time is counted in warnings.
 
 ## 2026-08-22 — Fixed flight delay calculation to use full plan/actual dates instead of time only; flights arriving earlier than planned are no longer marked as delayed.
