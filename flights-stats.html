@@ -209,6 +209,7 @@
     white-space: nowrap;
   }
   .delay { color: #b45309; font-size: 11px; font-weight: 600; }
+  .cell-date { color: #94a3b8; margin-right: 4px; }
   .threshold-bar {
     display: flex;
     flex-wrap: wrap;
@@ -331,6 +332,17 @@ const fmtTime = s => {
   return m ? `${m[1]}:${m[2]}` : '—';
 };
 
+const timeCell = (s, otherDate) => {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return '—';
+  const date = `${m[1]}-${m[2]}-${m[3]}`;
+  const time = `${m[4]}:${m[5]}`;
+  if (otherDate && date !== otherDate) {
+    return html`<span class="cell-date">${+m[3]}.${m[2]}</span> ${time}`;
+  }
+  return time;
+};
+
 const flightLabel = (f, type) => (f[KEY_FLIGHT[type]] || '').trim();
 
 const flightDir = (f, type) => {
@@ -364,13 +376,21 @@ const flightAirport = (f, type) => {
 };
 
 const delayMinutes = (f, type) => {
-  const plan = f[KEY_PLAN[type]];
-  const act = f[KEY_ACTUAL[type]];
-  const a = String(plan || '').match(/T(\d{2}):(\d{2})/);
-  const b = String(act || '').match(/T(\d{2}):(\d{2})/);
-  if (!a || !b) return null;
-  const pa = (+a[1]) * 60 + (+a[2]);
-  const pb = (+b[1]) * 60 + (+b[2]);
+  const plan = String(f[KEY_PLAN[type]] || '');
+  const act = String(f[KEY_ACTUAL[type]] || '');
+  const a = plan.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  const b = act.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (a && b) {
+    // Полные даты известны — считаем абсолютную разницу в минутах
+    const toMin = m => Date.UTC(+m[1], +m[2] - 1, +m[3]) / 60000 + (+m[4]) * 60 + (+m[5]);
+    return toMin(b) - toMin(a); // отрицательное значение — рейс раньше плана
+  }
+  // Fallback: только время (без полной даты в данных)
+  const ta = plan.match(/T(\d{2}):(\d{2})/);
+  const tb = act.match(/T(\d{2}):(\d{2})/);
+  if (!ta || !tb) return null;
+  const pa = (+ta[1]) * 60 + (+ta[2]);
+  const pb = (+tb[1]) * 60 + (+tb[2]);
   if (pb >= pa) return pb - pa;
   return 1440 - pa + pb; // переход через полночь
 };
@@ -869,15 +889,21 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
 
   const rows = flights
     .filter(f => actualDate(f, type) === date)
-    .map(f => ({
-      f,
-      label: flightLabel(f, type),
-      dir: flightDir(f, type),
-      plan: f[KEY_PLAN[type]] || '',
-      act: f[KEY_ACTUAL[type]] || '',
-      delay: delayMinutes(f, type),
-      status: effectiveStatus(f, type, threshold)
-    }));
+    .map(f => {
+      const planRaw = f[KEY_PLAN[type]] || '';
+      const actRaw = f[KEY_ACTUAL[type]] || '';
+      return {
+        f,
+        label: flightLabel(f, type),
+        dir: flightDir(f, type),
+        plan: planRaw,
+        act: actRaw,
+        planDate: fmtDate(planRaw),
+        actDate: fmtDate(actRaw),
+        delay: delayMinutes(f, type),
+        status: effectiveStatus(f, type, threshold)
+      };
+    });
 
   const sortVal = {
     label:  r => r.label.toLowerCase(),
@@ -943,9 +969,9 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
                     <tr>
                       <td>${r.label}</td>
                       <td>${r.dir}</td>
-                      <td>${fmtTime(r.plan)}</td>
+                      <td>${timeCell(r.plan, r.actDate)}</td>
                       <td>
-                        ${fmtTime(r.act)}
+                        ${timeCell(r.act, r.planDate)}
                         ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${fmtDelay(r.delay)}</span>`}
                       </td>
                       <td><span class="status-badge" style="background:${color}22;color:${color}">${r.status}</span></td>
