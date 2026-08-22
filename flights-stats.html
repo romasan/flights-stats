@@ -278,6 +278,14 @@ const THRESHOLD_OPTIONS = [
   { value: 30,   label: '30 минут' },
   { value: 60,   label: '1 час' },
   { value: 120,  label: '2 часа' },
+  { value: 180,  label: '3 часа' },
+  { value: 240,  label: '4 часа' },
+  { value: 300,  label: '5 часов' },
+  { value: 600,  label: '10 часов' },
+  { value: 720,  label: '12 часов' },
+  { value: 960,  label: '16 часов' },
+  { value: 1200,  label: '20 часов' },
+  { value: 1380,  label: '23 часа' },
   { value: 1440, label: 'сутки' },
   { value: null, label: 'не важно' }
 ];
@@ -548,8 +556,10 @@ function getExcludedDates(failedLogDays, loadResult) {
   return excluded;
 }
 
-function parsePlanTime(flight, type) {
-  const raw = flight[KEY_PLAN[type]] || flight[KEY_ACTUAL[type]] || '';
+function parseFlightTime(flight, type, preferActual) {
+  const primary = preferActual ? KEY_ACTUAL[type] : KEY_PLAN[type];
+  const fallback = preferActual ? KEY_PLAN[type] : KEY_ACTUAL[type];
+  const raw = flight[primary] || flight[fallback] || '';
   const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!m) return null;
   const year = +m[1], month = +m[2] - 1, day = +m[3];
@@ -557,20 +567,21 @@ function parsePlanTime(flight, type) {
   return { hour: +m[4], minute: +m[5], dow };
 }
 
-function buildCancelHeat(flights, type, excludedDates, threshold) {
-  const cells = new Map(); // key: dow*24 + hour → { total, cancelled }
+function buildStatusHeat(flights, type, excludedDates, threshold, preferActual) {
+  const targetStatus = preferActual ? 'Задержан' : 'Отмена';
+  const cells = new Map(); // key: dow*24 + hour → { total, matched }
   for (const f of flights) {
     if (excludedDates.has(f._fileDate)) continue;
-    const t = parsePlanTime(f, type);
+    const t = parseFlightTime(f, type, preferActual);
     if (!t) continue;
     const key = t.dow * 24 + t.hour;
     let cell = cells.get(key);
     if (!cell) {
-      cell = { total: 0, cancelled: 0 };
+      cell = { total: 0, matched: 0 };
       cells.set(key, cell);
     }
     cell.total++;
-    if (effectiveStatus(f, type, threshold).trim() === 'Отмена') cell.cancelled++;
+    if (effectiveStatus(f, type, threshold).trim() === targetStatus) cell.matched++;
   }
 
   const data = [];
@@ -578,13 +589,13 @@ function buildCancelHeat(flights, type, excludedDates, threshold) {
     for (let hour = 0; hour < 24; hour++) {
       const cell = cells.get(dow * 24 + hour);
       const total = cell ? cell.total : 0;
-      const cancelled = cell ? cell.cancelled : 0;
+      const matched = cell ? cell.matched : 0;
       data.push({
         x: hour,
         y: dow,
-        v: total ? cancelled / total : null,
+        v: total ? matched / total : null,
         total,
-        cancelled
+        matched
       });
     }
   }
@@ -649,7 +660,7 @@ function createLineChart(canvas, agg) {
   });
 }
 
-function createHeatmap(canvas, data) {
+function createHeatmap(canvas, data, label) {
   // Фиксированный размер ячеек 15×15px
   const cellWidth = () => 15;
   const cellHeight = () => 15;
@@ -658,7 +669,7 @@ function createHeatmap(canvas, data) {
     type: 'matrix',
     data: {
       datasets: [{
-        label: 'Вероятность отмены',
+        label,
         data,
         borderColor: 'rgba(255,255,255,0.7)',
         borderWidth: 0.6,
@@ -686,7 +697,7 @@ function createHeatmap(canvas, data) {
             label: ctx => {
               const r = ctx.raw;
               if (!r || !r.total) return 'Нет данных';
-              return `Отмен: ${r.cancelled} из ${r.total} (${(100 * r.v).toFixed(1)}%)`;
+              return `${label}: ${r.matched} из ${r.total} (${(100 * r.v).toFixed(1)}%)`;
             }
           }
         },
@@ -793,6 +804,17 @@ const ThresholdSelect = ({ value, onChange }) => html`
   </div>
 `;
 
+const HeatSelect = ({ value, onChange }) => html`
+  <div class="threshold-bar">
+    <label for="heat-select">Показывать в тепловых картах:</label>
+    <select id="heat-select" value=${value} onChange=${e => onChange(e.target.value)}>
+      <option value="cancel">Отмена</option>
+      <option value="delay">Задержка</option>
+    </select>
+    <span class="threshold-hint">Графики покажут вероятность отмены или задержки в зависимости от выбранного статуса</span>
+  </div>
+`;
+
 const LineChart = ({ agg }) => {
   const ref = useRef(null);
   useEffect(() => {
@@ -802,12 +824,12 @@ const LineChart = ({ agg }) => {
   return html`<div class="chart-wrapper"><canvas ref=${ref}></canvas></div>`;
 };
 
-const HeatmapChart = ({ data }) => {
+const HeatmapChart = ({ data, label }) => {
   const ref = useRef(null);
   useEffect(() => {
-    const chart = createHeatmap(ref.current, data);
+    const chart = createHeatmap(ref.current, data, label);
     return () => chart.destroy();
-  }, [data]);
+  }, [data, label]);
   return html`<canvas ref=${ref}></canvas>`;
 };
 
@@ -1020,7 +1042,7 @@ const StatsTable = ({ agg, title, subtitle, onDateClick }) => {
   `;
 };
 
-const Content = ({ data, threshold, onThresholdChange }) => {
+const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricChange }) => {
   const { aggDep, aggArr, heatDep, heatArr, logFailDays, flightsDep, flightsArr } = data;
   const [popup, setPopup] = useState(null);
 
@@ -1046,17 +1068,23 @@ const Content = ({ data, threshold, onThresholdChange }) => {
         </div>
       </div>
 
+      <${HeatSelect} value=${heatMetric} onChange=${onHeatMetricChange}></${HeatSelect}>
+
       <div class="charts-grid">
         <div class="card">
-          <h2>🌡 Вероятность отмены вылета</h2>
-          <div class="subtitle">Доля отменённых рейсов по дню недели и часу суток (плановое время STD). Дни без статистики исключены.</div>
-          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatDep}></${HeatmapChart}></div>
+          <h2>🌡 Вероятность ${heatMetric === 'cancel' ? 'отмены' : 'задержки'} вылета</h2>
+          <div class="subtitle">${heatMetric === 'cancel'
+            ? 'Доля отменённых рейсов по дню недели и часу суток (плановое время STD). Дни без статистики исключены.'
+            : 'Доля задержанных рейсов по дню недели и часу суток (фактическое время ATD). Дни без статистики исключены.'}</div>
+          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatDep} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
           <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
         </div>
         <div class="card">
-          <h2>🌡 Вероятность отмены прилёта</h2>
-          <div class="subtitle">Доля отменённых рейсов по дню недели и часу суток (плановое время STA). Дни без статистики исключены.</div>
-          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatArr}></${HeatmapChart}></div>
+          <h2>🌡 Вероятность ${heatMetric === 'cancel' ? 'отмены' : 'задержки'} прилёта</h2>
+          <div class="subtitle">${heatMetric === 'cancel'
+            ? 'Доля отменённых рейсов по дню недели и часу суток (плановое время STA). Дни без статистики исключены.'
+            : 'Доля задержанных рейсов по дню недели и часу суток (фактическое время ATA). Дни без статистики исключены.'}</div>
+          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatArr} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
           <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
         </div>
       </div>
@@ -1089,6 +1117,7 @@ const App = () => {
   const [error, setError] = useState(null);
   const [base, setBase] = useState(null);
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
+  const [heatMetric, setHeatMetric] = useState('cancel');
 
   useEffect(() => {
     let cancelled = false;
@@ -1140,13 +1169,13 @@ const App = () => {
     return {
       aggDep: aggregate(dep.flights, 'departure', threshold),
       aggArr: aggregate(arr.flights, 'arrival', threshold),
-      heatDep: buildCancelHeat(dep.flights, 'departure', excludedDep, threshold),
-      heatArr: buildCancelHeat(arr.flights, 'arrival', excludedArr, threshold),
+      heatDep: buildStatusHeat(dep.flights, 'departure', excludedDep, threshold, heatMetric === 'delay'),
+      heatArr: buildStatusHeat(arr.flights, 'arrival', excludedArr, threshold, heatMetric === 'delay'),
       logFailDays,
       flightsDep: dep.flights,
       flightsArr: arr.flights
     };
-  }, [base, threshold]);
+  }, [base, threshold, heatMetric]);
 
   useEffect(() => {
     if (!base) return;
@@ -1161,7 +1190,7 @@ const App = () => {
     <div class="container">
       <${Header} info=${headerInfo} status=${status} statusError=${statusError}></${Header}>
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
-      ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold}></${Content}>`}
+      ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold} heatMetric=${heatMetric} onHeatMetricChange=${setHeatMetric}></${Content}>`}
       ${phase === 'error' && html`<${ErrorState} message=${error}></${ErrorState}>`}
     </div>
   `;
