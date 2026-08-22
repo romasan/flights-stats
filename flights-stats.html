@@ -425,6 +425,13 @@ const pluralDays = n => {
   return 'дней';
 };
 
+const pluralFlights = n => {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'рейс';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'рейса';
+  return 'рейсов';
+};
+
 const errTagText = t =>
   t === 'arrival'     ? 'прилёты'
   : t === 'departure' ? 'вылеты'
@@ -587,13 +594,16 @@ function parseFlightTime(flight, type, preferActual) {
   return { hour: +m[4], minute: +m[5], dow };
 }
 
-function buildStatusHeat(flights, type, excludedDates, threshold, preferActual) {
-  const targetStatus = preferActual ? 'Задержан' : 'Отмена';
+function buildStatusHeat(flights, type, excludedDates, threshold, wantDelay) {
+  const targetStatus = wantDelay ? 'Задержан' : 'Отмена';
   const cells = new Map(); // key: dow*24 + hour → { total, matched }
+  let fallbackCount = 0;
   for (const f of flights) {
     if (excludedDates.has(f._fileDate)) continue;
-    const t = parseFlightTime(f, type, preferActual);
+    // Группировка по плановому времени (STD/STA); при отсутствии используется фактическое (ATD/ATA)
+    const t = parseFlightTime(f, type, false);
     if (!t) continue;
+    if (!f[KEY_PLAN[type]]) fallbackCount++;
     const key = t.dow * 24 + t.hour;
     let cell = cells.get(key);
     if (!cell) {
@@ -619,7 +629,7 @@ function buildStatusHeat(flights, type, excludedDates, threshold, preferActual) 
       });
     }
   }
-  return data;
+  return { data, fallbackCount };
 }
 
 function heatColor(p, total) {
@@ -798,16 +808,31 @@ const SummaryCards = ({ aggDep, aggArr }) => html`
   </div>
 `;
 
-const FetchErrors = ({ failedDays }) => html`
-  <div class="alert">
-    <h3>⚠ Не удалось получить статистику за ${failedDays.length} ${pluralDays(failedDays.length)}</h3>
-    <ul>
-      ${failedDays.map(d => html`
-        <li><strong>${fmtLogDate(d.date)}</strong>${d.errors.map(t => html`<span class="err-tag">${errTagText(t)}</span>`)}</li>
-      `)}
-    </ul>
-  </div>
-`;
+const FetchErrors = ({ failedDays, fallbackDep = 0, fallbackArr = 0 }) => {
+  const hasFailed = failedDays.length > 0;
+  const hasFallback = fallbackDep > 0 || fallbackArr > 0;
+  if (!hasFailed && !hasFallback) return null;
+  const fallbackParts = [];
+  if (fallbackDep > 0) fallbackParts.push(`${fallbackDep} ${pluralFlights(fallbackDep)} по вылетам`);
+  if (fallbackArr > 0) fallbackParts.push(`${fallbackArr} ${pluralFlights(fallbackArr)} по прилётам`);
+  return html`
+    <div class="alert">
+      <h3>⚠ ${hasFailed
+        ? `Не удалось получить статистику за ${failedDays.length} ${pluralDays(failedDays.length)}`
+        : 'Часть рейсов без планового времени'}</h3>
+      ${hasFailed && html`
+        <ul>
+          ${failedDays.map(d => html`
+            <li><strong>${fmtLogDate(d.date)}</strong>${d.errors.map(t => html`<span class="err-tag">${errTagText(t)}</span>`)}</li>
+          `)}
+        </ul>
+      `}
+      ${hasFallback && html`
+        <p>${fallbackParts.join(', ')} — нет планового времени (STD/STA), использовано фактическое (ATD/ATA).</p>
+      `}
+    </div>
+  `;
+};
 
 const ThresholdSelect = ({ value, onChange }) => html`
   <div class="threshold-bar">
@@ -1078,7 +1103,7 @@ const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricC
   return html`
   <div>
       <${SummaryCards} aggDep=${aggDep} aggArr=${aggArr}></${SummaryCards}>
-      ${logFailDays.length > 0 && html`<${FetchErrors} failedDays=${logFailDays}></${FetchErrors}>`}
+      <${FetchErrors} failedDays=${logFailDays} fallbackDep=${heatDep.fallbackCount} fallbackArr=${heatArr.fallbackCount}></${FetchErrors}>
       <${ThresholdSelect} value=${threshold} onChange=${onThresholdChange}></${ThresholdSelect}>
 
       <div class="charts-grid">
@@ -1101,16 +1126,16 @@ const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricC
           <h2>🌡 Вероятность ${heatMetric === 'cancel' ? 'отмены' : 'задержки'} вылета</h2>
           <div class="subtitle">${heatMetric === 'cancel'
             ? 'Доля отменённых рейсов по дню недели и часу суток (плановое время STD). Дни без статистики исключены.'
-            : 'Доля задержанных рейсов по дню недели и часу суток (фактическое время ATD). Дни без статистики исключены.'}</div>
-          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatDep} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
+            : 'Доля задержанных рейсов по дню недели и часу суток (плановое время STD). Дни без статистики исключены.'}</div>
+          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatDep.data} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
           <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
         </div>
         <div class="card">
           <h2>🌡 Вероятность ${heatMetric === 'cancel' ? 'отмены' : 'задержки'} прилёта</h2>
           <div class="subtitle">${heatMetric === 'cancel'
             ? 'Доля отменённых рейсов по дню недели и часу суток (плановое время STA). Дни без статистики исключены.'
-            : 'Доля задержанных рейсов по дню недели и часу суток (фактическое время ATA). Дни без статистики исключены.'}</div>
-          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatArr} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
+            : 'Доля задержанных рейсов по дню недели и часу суток (плановое время STA). Дни без статистики исключены.'}</div>
+          <div class="chart-wrapper heat"><${HeatmapChart} data=${heatArr.data} label=${heatMetric === 'cancel' ? 'Отмен' : 'Задержан'}></${HeatmapChart}></div>
           <div class="heat-scale"><span>0%</span><span class="grad" style="background:linear-gradient(90deg,#e8f5e9,#a3e635,#f59e0b,#dc2626)"></span><span>100%</span></div>
         </div>
       </div>
