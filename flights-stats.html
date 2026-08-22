@@ -209,6 +209,29 @@
     white-space: nowrap;
   }
   .delay { color: #b45309; font-size: 11px; font-weight: 600; }
+  .threshold-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .threshold-bar select {
+    font: inherit;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+    cursor: pointer;
+  }
+  .threshold-bar select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+  .threshold-hint { font-size: 12px; color: #64748b; }
   .day-link {
     color: #2563eb;
     cursor: pointer;
@@ -225,7 +248,7 @@
 'use strict';
 
 const { h, render } = preact;
-const { useState, useEffect, useRef } = preactHooks;
+const { useState, useEffect, useRef, useMemo } = preactHooks;
 const html = htm.bind(h);
 
 // === Константы и данные ===
@@ -248,6 +271,17 @@ const PRIORITY_STATUS = { 'Отправлен': 0, 'Прибыл': 0, 'Заде�
 const NO_STATUS = 'Без статуса';
 
 const DOW_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+const THRESHOLD_OPTIONS = [
+  { value: 0,    label: '0 минут' },
+  { value: 15,   label: '15 минут' },
+  { value: 30,   label: '30 минут' },
+  { value: 60,   label: '1 час' },
+  { value: 120,  label: '2 часа' },
+  { value: 1440, label: 'сутки' },
+  { value: null, label: 'не важно' }
+];
+const DEFAULT_THRESHOLD = 60;
 
 const FIXED_COLORS = {
   'Отправлен': '#16a34a',
@@ -331,6 +365,27 @@ const delayMinutes = (f, type) => {
   const pb = (+b[1]) * 60 + (+b[2]);
   if (pb >= pa) return pb - pa;
   return 1440 - pa + pb; // переход через полночь
+};
+
+const fmtDelay = mins => {
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  const parts = [];
+  if (d > 0) parts.push(`${d} д`);
+  if (h > 0) parts.push(`${h} ч`);
+  if (m > 0 || parts.length === 0) parts.push(`${m} мин`);
+  return parts.join(' ');
+};
+
+const effectiveStatus = (flight, type, threshold) => {
+  const s = statusRu(flight, type);
+  if (threshold === null) return s;
+  if (s === 'Отправлен' || s === 'Прибыл') {
+    const d = delayMinutes(flight, type);
+    if (d !== null && d > 0 && d >= threshold) return 'Задержан';
+  }
+  return s;
 };
 
 const fmtLogDate = s => `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
@@ -440,12 +495,12 @@ async function loadType(files, type) {
   return { flights, errors, total: list.length, failedDates };
 }
 
-function aggregate(flights, type) {
+function aggregate(flights, type, threshold) {
   const byDate = new Map();
   for (const f of flights) {
     const date = actualDate(f, type);
     if (!date) continue;
-    const status = statusRu(f, type);
+    const status = effectiveStatus(f, type, threshold);
     if (!byDate.has(date)) byDate.set(date, new Map());
     const m = byDate.get(date);
     m.set(status, (m.get(status) || 0) + 1);
@@ -502,7 +557,7 @@ function parsePlanTime(flight, type) {
   return { hour: +m[4], minute: +m[5], dow };
 }
 
-function buildCancelHeat(flights, type, excludedDates) {
+function buildCancelHeat(flights, type, excludedDates, threshold) {
   const cells = new Map(); // key: dow*24 + hour → { total, cancelled }
   for (const f of flights) {
     if (excludedDates.has(f._fileDate)) continue;
@@ -515,7 +570,7 @@ function buildCancelHeat(flights, type, excludedDates) {
       cells.set(key, cell);
     }
     cell.total++;
-    if (statusRu(f, type).trim() === 'Отмена') cell.cancelled++;
+    if (effectiveStatus(f, type, threshold).trim() === 'Отмена') cell.cancelled++;
   }
 
   const data = [];
@@ -723,6 +778,21 @@ const FetchErrors = ({ failedDays }) => html`
   </div>
 `;
 
+const ThresholdSelect = ({ value, onChange }) => html`
+  <div class="threshold-bar">
+    <label for="threshold-select">Считать задержкой (и менять статус на «Задержан»):</label>
+    <select id="threshold-select" value=${value === null ? '' : value} onChange=${e => {
+      const raw = e.target.value;
+      onChange(raw === '' ? null : +raw);
+    }}>
+      ${THRESHOLD_OPTIONS.map(o => html`
+        <option value=${o.value === null ? '' : o.value}>${o.label}</option>
+      `)}
+    </select>
+    <span class="threshold-hint">Рейсы «Отправлен»/«Прибыл» с задержкой от выбранного порога будут показаны как «Задержан»</span>
+  </div>
+`;
+
 const LineChart = ({ agg }) => {
   const ref = useRef(null);
   useEffect(() => {
@@ -765,7 +835,7 @@ const PopupPortal = ({ children, onClose }) => {
   return null;
 };
 
-const FlightsPopup = ({ type, date, flights, onClose }) => {
+const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
   const [sortKey, setSortKey] = useState('plan');
   const [sortDir, setSortDir] = useState(1);
 
@@ -784,7 +854,7 @@ const FlightsPopup = ({ type, date, flights, onClose }) => {
       plan: f[KEY_PLAN[type]] || '',
       act: f[KEY_ACTUAL[type]] || '',
       delay: delayMinutes(f, type),
-      status: statusRu(f, type)
+      status: effectiveStatus(f, type, threshold)
     }));
 
   const sortVal = {
@@ -854,7 +924,7 @@ const FlightsPopup = ({ type, date, flights, onClose }) => {
                       <td>${fmtTime(r.plan)}</td>
                       <td>
                         ${fmtTime(r.act)}
-                        ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${r.delay} мин</span>`}
+                        ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${fmtDelay(r.delay)}</span>`}
                       </td>
                       <td><span class="status-badge" style="background:${color}22;color:${color}">${r.status}</span></td>
                     </tr>
@@ -950,7 +1020,7 @@ const StatsTable = ({ agg, title, subtitle, onDateClick }) => {
   `;
 };
 
-const Content = ({ data }) => {
+const Content = ({ data, threshold, onThresholdChange }) => {
   const { aggDep, aggArr, heatDep, heatArr, logFailDays, flightsDep, flightsArr } = data;
   const [popup, setPopup] = useState(null);
 
@@ -961,6 +1031,7 @@ const Content = ({ data }) => {
   <div>
       <${SummaryCards} aggDep=${aggDep} aggArr=${aggArr}></${SummaryCards}>
       ${logFailDays.length > 0 && html`<${FetchErrors} failedDays=${logFailDays}></${FetchErrors}>`}
+      <${ThresholdSelect} value=${threshold} onChange=${onThresholdChange}></${ThresholdSelect}>
 
       <div class="charts-grid">
         <div class="card">
@@ -1001,6 +1072,7 @@ const Content = ({ data }) => {
             type=${popup.type}
             date=${popup.date}
             flights=${popup.type === 'departure' ? flightsDep : flightsArr}
+            threshold=${threshold}
             onClose=${closePopup}
           ></${FlightsPopup}>
         </${PopupPortal}>
@@ -1015,7 +1087,8 @@ const App = () => {
   const [statusError, setStatusError] = useState(false);
   const [headerInfo, setHeaderInfo] = useState('загрузка данных…');
   const [error, setError] = useState(null);
-  const [data, setData] = useState(null);
+  const [base, setBase] = useState(null);
+  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
 
   useEffect(() => {
     let cancelled = false;
@@ -1034,15 +1107,8 @@ const App = () => {
         ]);
         if (cancelled) return;
 
-        const aggDep = aggregate(dep.flights, 'departure');
-        const aggArr = aggregate(arr.flights, 'arrival');
         const excludedDep = getExcludedDates(logFailDays, dep);
         const excludedArr = getExcludedDates(logFailDays, arr);
-
-        const now = new Date();
-        setHeaderInfo(
-          `данные за ${aggDep.dates.length} дней вылетов и ${aggArr.dates.length} дней прилётов · обновлено ${now.toLocaleString('ru-RU')}`
-        );
 
         const warnParts = [];
         if (dep.errors) warnParts.push(`вылеты: ${dep.errors}/${dep.total} файлов не загружено`);
@@ -1054,15 +1120,7 @@ const App = () => {
           : `Готово: ${dep.total} + ${arr.total} файлов, ${dep.flights.length + arr.flights.length} рейсов обработано`
         );
 
-        setData({
-          aggDep,
-          aggArr,
-          heatDep: buildCancelHeat(dep.flights, 'departure', excludedDep),
-          heatArr: buildCancelHeat(arr.flights, 'arrival', excludedArr),
-          logFailDays,
-          flightsDep: dep.flights,
-          flightsArr: arr.flights
-        });
+        setBase({ dep, arr, logFailDays, excludedDep, excludedArr });
         setPhase('ready');
       } catch (err) {
         if (cancelled) return;
@@ -1076,11 +1134,34 @@ const App = () => {
     return () => { cancelled = true; };
   }, []);
 
+  const data = useMemo(() => {
+    if (!base) return null;
+    const { dep, arr, logFailDays, excludedDep, excludedArr } = base;
+    return {
+      aggDep: aggregate(dep.flights, 'departure', threshold),
+      aggArr: aggregate(arr.flights, 'arrival', threshold),
+      heatDep: buildCancelHeat(dep.flights, 'departure', excludedDep, threshold),
+      heatArr: buildCancelHeat(arr.flights, 'arrival', excludedArr, threshold),
+      logFailDays,
+      flightsDep: dep.flights,
+      flightsArr: arr.flights
+    };
+  }, [base, threshold]);
+
+  useEffect(() => {
+    if (!base) return;
+    const { aggDep, aggArr } = data;
+    const now = new Date();
+    setHeaderInfo(
+      `данные за ${aggDep.dates.length} дней вылетов и ${aggArr.dates.length} дней прилётов · обновлено ${now.toLocaleString('ru-RU')}`
+    );
+  }, [data]);
+
   return html`
     <div class="container">
       <${Header} info=${headerInfo} status=${status} statusError=${statusError}></${Header}>
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
-      ${phase === 'ready' && data && html`<${Content} data=${data}></${Content}>`}
+      ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold}></${Content}>`}
       ${phase === 'error' && html`<${ErrorState} message=${error}></${ErrorState}>`}
     </div>
   `;

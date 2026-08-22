@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-08-22 — Formatted flight delays over 60 minutes in the departure/arrival popup as hours/minutes and days/hours/minutes instead of plain minutes; added a selectable delay threshold (0 min / 15 min / 30 min / 1 hour / 2 hours / 1 day / "not important", default 1 hour) that reclassifies flights with actual delay above the threshold as "Задержан" in statistics, heatmaps and popups.
+
 ## 2026-08-22 — Fixed departure/arrival tables overflowing the page layout: added min-width: 0 to table grid cards so wide tables scroll inside their own container.
 
 ## 2026-08-20 — Fixed modal popup layout on mobile: switched to dvh units with vh/percentage fallback and added compact padding for screens under 640px so the popup stays within the visible area.
