@@ -118,6 +118,103 @@
     margin: 0 auto 14px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px;
+    z-index: 1000;
+    overflow-y: auto;
+    height: 100%;
+    height: 100dvh;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    width: 100%;
+    max-width: 860px;
+    max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.modal-open { overflow: hidden; }
+  @media (max-width: 640px) {
+    .modal-overlay {
+      padding: 10px;
+      align-items: stretch;
+      max-width: 100vw;
+    }
+    .modal {
+      max-height: calc(100dvh - 20px);
+      max-width: calc(100vw - 20px);
+      min-width: 0;
+      border-radius: 10px;
+    }
+    .modal-header {
+      padding: 10px 12px;
+    }
+    .modal-header h2 { font-size: 15px; }
+    .modal-close { width: 30px; height: 30px; }
+    .card .table-wrap { overflow: auto; max-width: calc(100vw - 60px); }
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .modal-header h2 { font-size: 18px; color: #1e293b; }
+  .modal-header .subtitle { font-size: 13px; color: #64748b; }
+  .modal-close {
+    flex-shrink: 0;
+    width: 32px; height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .modal-close:hover { background: #e2e8f0; }
+  .modal-body { overflow: auto; padding: 0; }
+  .modal-body .table-wrap { overflow: unset; }
+  .modal-body table { overflow: auto; }
+  .modal-body .table-wrap { max-height: none; border: none; border-radius: 0; }
+  .th-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .th-sortable:hover { color: #1e293b; }
+  .th-sortable .arrow { font-size: 10px; margin-left: 3px; color: #94a3b8; }
+  .th-sortable.active .arrow { color: #2563eb; }
+  .status-badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .delay { color: #b45309; font-size: 11px; font-weight: 600; }
+  .day-link {
+    color: #2563eb;
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dashed #93c5fd;
+  }
+  .day-link:hover { border-bottom-style: solid; color: #1d4ed8; }
 </style>
 </head>
 <body>
@@ -131,7 +228,7 @@ const { useState, useEffect, useRef } = preactHooks;
 const html = htm.bind(h);
 
 // === Константы и данные ===
-const BASE = 'https://w.nbauer.ru/flights/';
+const BASE = document.location.href.replace(/\/[^\/]*$/, '/');
 
 const KEY_STATUS = {
   departure: 'OD_STATUS_RU',
@@ -184,6 +281,55 @@ const actualDate = (flight, type) => {
 const fmtDisplayDate = d => {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
+};
+
+const fmtTime = s => {
+  const m = String(s || '').match(/T(\d{2}):(\d{2})/);
+  return m ? `${m[1]}:${m[2]}` : '—';
+};
+
+const flightLabel = (f, type) => (f[KEY_FLIGHT[type]] || '').trim();
+
+const flightDir = (f, type) => {
+  const arr = flightAirport(f, type);
+  return arr && arr.name ? `${arr.code} · ${arr.name}` : (arr ? arr.code : '—');
+};
+
+const KEY_FLIGHT = {
+  departure: 'OD_FLIGHT_NUMBER',
+  arrival:   'OA_FLIGHT_NUMBER'
+};
+
+const KEY_AIRPORT = {
+  departure: 'OD_RAP_DESTINATION_NAME_RU',
+  arrival:   'OA_RAP_ORIGIN_NAME_RU'
+};
+
+const KEY_AIRPORT_CODE = {
+  departure: 'OD_RAP_CODE_DESTINATION',
+  arrival:   'OA_RAP_CODE_ORIGIN'
+};
+
+const flightAirport = (f, type) => {
+  const name = f[KEY_AIRPORT[type]];
+  const code = f[KEY_AIRPORT_CODE[type]];
+  if (!name && !code) return null;
+  return {
+    code: (code || '').trim(),
+    name: typeof name === 'string' ? name.trim() : ''
+  };
+};
+
+const delayMinutes = (f, type) => {
+  const plan = f[KEY_PLAN[type]];
+  const act = f[KEY_ACTUAL[type]];
+  const a = String(plan || '').match(/T(\d{2}):(\d{2})/);
+  const b = String(act || '').match(/T(\d{2}):(\d{2})/);
+  if (!a || !b) return null;
+  const pa = (+a[1]) * 60 + (+a[2]);
+  const pb = (+b[1]) * 60 + (+b[2]);
+  if (pb >= pa) return pb - pa;
+  return 1440 - pa + pb; // переход через полночь
 };
 
 const fmtLogDate = s => `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
@@ -594,7 +740,138 @@ const HeatmapChart = ({ data }) => {
   return html`<canvas ref=${ref}></canvas>`;
 };
 
-const StatsTable = ({ agg, title, subtitle }) => {
+const PopupPortal = ({ children, onClose }) => {
+  const elRef = useRef(null);
+  if (!elRef.current) {
+    elRef.current = document.createElement('div');
+    document.body.appendChild(elRef.current);
+  }
+  useEffect(() => {
+    document.body.classList.add('modal-open');
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => {
+      document.body.classList.remove('modal-open');
+      window.removeEventListener('keydown', handler);
+      render(null, elRef.current);
+      elRef.current.remove();
+      elRef.current = null;
+    };
+  }, [onClose]);
+  useEffect(() => {
+    if (elRef.current) render(children, elRef.current);
+  });
+  return null;
+};
+
+const FlightsPopup = ({ type, date, flights, onClose }) => {
+  const [sortKey, setSortKey] = useState('plan');
+  const [sortDir, setSortDir] = useState(1);
+
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const rows = flights
+    .filter(f => actualDate(f, type) === date)
+    .map(f => ({
+      f,
+      label: flightLabel(f, type),
+      dir: flightDir(f, type),
+      plan: f[KEY_PLAN[type]] || '',
+      act: f[KEY_ACTUAL[type]] || '',
+      delay: delayMinutes(f, type),
+      status: statusRu(f, type)
+    }));
+
+  const sortVal = {
+    label:  r => r.label.toLowerCase(),
+    dir:    r => r.dir.toLowerCase(),
+    plan:   r => r.plan || '\uffff',
+    act:    r => r.act || '\uffff',
+    status: r => r.status
+  };
+
+  rows.sort((a, b) => {
+    const va = sortVal[sortKey](a);
+    const vb = sortVal[sortKey](b);
+    if (va < vb) return -sortDir;
+    if (va > vb) return sortDir;
+    return String(a.plan || '').localeCompare(String(b.plan || ''));
+  });
+
+  const clickSort = key => {
+    if (key === sortKey) {
+      setSortDir(d => -d);
+    } else {
+      setSortKey(key);
+      setSortDir(1);
+    }
+  };
+
+  const arrow = key => (sortKey !== key ? '' : sortDir === 1 ? ' ▲' : ' ▼');
+
+  const columns = [
+    { key: 'label',  title: 'Рейс' },
+    { key: 'dir',    title: 'Направление' },
+    { key: 'plan',   title: 'План' },
+    { key: 'act',    title: 'Факт' },
+    { key: 'status', title: 'Статус' }
+  ];
+
+  return html`
+    <div class="modal-overlay" onClick=${e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <div>
+            <h2>${type === 'departure' ? '✈ Вылеты' : '🛬 Прилёты'} · ${fmtDisplayDate(date)}</h2>
+            <div class="subtitle">Всего рейсов: ${rows.length}</div>
+          </div>
+          <button class="modal-close" onClick=${onClose} aria-label="Закрыть">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  ${columns.map(c => html`
+                    <th class="th-sortable ${sortKey === c.key ? 'active' : ''}" onClick=${() => clickSort(c.key)}>
+                      ${c.title}<span class="arrow">${arrow(c.key)}</span>
+                    </th>
+                  `)}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map(r => {
+                  const color = FIXED_COLORS[r.status] || '#64748b';
+                  return html`
+                    <tr>
+                      <td>${r.label}</td>
+                      <td>${r.dir}</td>
+                      <td>${fmtTime(r.plan)}</td>
+                      <td>
+                        ${fmtTime(r.act)}
+                        ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${r.delay} мин</span>`}
+                      </td>
+                      <td><span class="status-badge" style="background:${color}22;color:${color}">${r.status}</span></td>
+                    </tr>
+                  `;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const StatsTable = ({ agg, title, subtitle, onDateClick }) => {
+  const [sortKey, setSortKey] = useState('date');
+  const [sortDir, setSortDir] = useState(1);
+
   const totals = {};
   for (const st of agg.statuses) totals[st] = 0;
   const rowTotals = {};
@@ -610,6 +887,25 @@ const StatsTable = ({ agg, title, subtitle }) => {
     grandTotal += sum;
   }
 
+  const sortedDates = [...agg.dates].sort((a, b) => {
+    const va = sortKey === 'date' ? a : sortKey === 'total' ? rowTotals[a] : agg.byDate.get(a).get(sortKey) || 0;
+    const vb = sortKey === 'date' ? b : sortKey === 'total' ? rowTotals[b] : agg.byDate.get(b).get(sortKey) || 0;
+    if (va < vb) return -sortDir;
+    if (va > vb) return sortDir;
+    return a.localeCompare(b);
+  });
+
+  const clickSort = key => {
+    if (key === sortKey) {
+      setSortDir(d => -d);
+    } else {
+      setSortKey(key);
+      setSortDir(1);
+    }
+  };
+
+  const arrow = key => (sortKey !== key ? '' : sortDir === 1 ? ' ▲' : ' ▼');
+
   return html`
     <div class="card">
       <h2>${title}</h2>
@@ -618,17 +914,23 @@ const StatsTable = ({ agg, title, subtitle }) => {
         <table>
           <thead>
             <tr>
-              <th>Дата</th>
+              <th class="th-sortable ${sortKey === 'date' ? 'active' : ''}" onClick=${() => clickSort('date')}>
+                Дата<span class="arrow">${arrow('date')}</span>
+              </th>
               ${agg.statuses.map((st, i) => html`
-                <th><span class="legend-dot" style="background:${colorFor(st, i)}"></span>${st}</th>
+                <th class="th-sortable ${sortKey === st ? 'active' : ''}" onClick=${() => clickSort(st)}>
+                  <span class="legend-dot" style="background:${colorFor(st, i)}"></span>${st}<span class="arrow">${arrow(st)}</span>
+                </th>
               `)}
-              <th>Итого</th>
+              <th class="th-sortable ${sortKey === 'total' ? 'active' : ''}" onClick=${() => clickSort('total')}>
+                Итого<span class="arrow">${arrow('total')}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            ${agg.dates.map(d => html`
+            ${sortedDates.map(d => html`
               <tr>
-                <td>${fmtDisplayDate(d)}</td>
+                <td><a class="day-link" href="#" onClick=${e => { e.preventDefault(); onDateClick(d); }}>${fmtDisplayDate(d)}</a></td>
                 ${agg.statuses.map(st => html`<td>${agg.byDate.get(d).get(st) || 0}</td>`)}
                 <td><strong>${rowTotals[d]}</strong></td>
               </tr>
@@ -648,7 +950,12 @@ const StatsTable = ({ agg, title, subtitle }) => {
 };
 
 const Content = ({ data }) => {
-  const { aggDep, aggArr, heatDep, heatArr, logFailDays } = data;
+  const { aggDep, aggArr, heatDep, heatArr, logFailDays, flightsDep, flightsArr } = data;
+  const [popup, setPopup] = useState(null);
+
+  const openPopup = (type, date) => setPopup({ type, date });
+  const closePopup = () => setPopup(null);
+
   return html`
   <div>
       <${SummaryCards} aggDep=${aggDep} aggArr=${aggArr}></${SummaryCards}>
@@ -683,9 +990,20 @@ const Content = ({ data }) => {
       </div>
 
       <div class="tables-grid">
-        <${StatsTable} agg=${aggDep} title="Таблица вылетов" subtitle="Количество рейсов по дням и статусам"></${StatsTable}>
-        <${StatsTable} agg=${aggArr} title="Таблица прилётов" subtitle="Количество рейсов по дням и статусам"></${StatsTable}>
+        <${StatsTable} agg=${aggDep} title="Таблица вылетов" subtitle="Количество рейсов по дням и статусам (клик по дате — список рейсов)" onDateClick=${d => openPopup('departure', d)}></${StatsTable}>
+        <${StatsTable} agg=${aggArr} title="Таблица прилётов" subtitle="Количество рейсов по дням и статусам (клик по дате — список рейсов)" onDateClick=${d => openPopup('arrival', d)}></${StatsTable}>
       </div>
+
+      ${popup && html`
+        <${PopupPortal} onClose=${closePopup}>
+          <${FlightsPopup}
+            type=${popup.type}
+            date=${popup.date}
+            flights=${popup.type === 'departure' ? flightsDep : flightsArr}
+            onClose=${closePopup}
+          ></${FlightsPopup}>
+        </${PopupPortal}>
+      `}
     </div>
   `;
 };
@@ -740,7 +1058,9 @@ const App = () => {
           aggArr,
           heatDep: buildCancelHeat(dep.flights, 'departure', excludedDep),
           heatArr: buildCancelHeat(arr.flights, 'arrival', excludedArr),
-          logFailDays
+          logFailDays,
+          flightsDep: dep.flights,
+          flightsArr: arr.flights
         });
         setPhase('ready');
       } catch (err) {
@@ -761,7 +1081,6 @@ const App = () => {
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
       ${phase === 'ready' && data && html`<${Content} data=${data}></${Content}>`}
       ${phase === 'error' && html`<${ErrorState} message=${error}></${ErrorState}>`}
-      <footer>Источник данных: <a href="https://w.nbauer.ru/flights/" target="_blank" rel="noopener">w.nbauer.ru/flights/</a></footer>
     </div>
   `;
 };

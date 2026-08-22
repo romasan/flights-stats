@@ -1,6 +1,8 @@
 # Changelog
 
-## 2026-08-20 — Rewrote flights-stats.html UI to Preact + htm (tagged templates) with runtime rendering via CDN, keeping Chart.js for charts.
+## 2026-08-20 — Fixed modal popup layout on mobile: switched to dvh units with vh/percentage fallback and added compact padding for screens under 640px so the popup stays within the visible area.
+
+## 2026-08-20 — Added clickable dates in departure/arrival tables opening a modal with all flights for the selected day, plus column sorting in tables and modal.
 
 ## 2026-08-20 — Removed the "Обновить" button and the "лог: ошибки" fragment from the status bar in flights-stats.html.
 
