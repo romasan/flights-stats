@@ -22,7 +22,7 @@
 2. **Обращается к API аэропорта Пулково**:
    - `https://pulkovoairport.ru/api/?type=arrival&when=-1` — прилёты за вчера;
    - `https://pulkovoairport.ru/api/?type=departure&when=-1` — вылеты за вчера.
-3. **Сохраняет данные** в JSON-файлы с датой в имени:
+3. **Сохраняет данные** в JSON-файлы с датой в имени (рядом со скриптом, независимо от рабочей директории, из которой он запущен — в том числе из cron):
    - `arrival-YYYYMMDD.json`;
    - `departure-YYYYMMDD.json`.
 4. **Имитирует браузер** через User-Agent, чтобы обойти базовую защиту от ботов.
@@ -71,6 +71,12 @@
 
 ```bash
 0 1 * * * cd /path/to/project && ./fetch_flights.sh >> fetch_flights.log 2>&1
+```
+
+JSON-файлы сохраняются в директорию самого скрипта (`/path/to/project/`), а лог — в директорию, указанную в cron (обычно домашняя). При необходимости задайте полный путь к логу, например:
+
+```bash
+0 1 * * * cd /path/to/project && ./fetch_flights.sh >> /path/to/project/fetch_flights.log 2>&1
 ```
 
 ### Просмотр статистики

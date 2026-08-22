@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 0. Определение директории скрипта. Важно при запуске из cron:
+#    рабочая директория по умолчанию — домашняя, а не директория скрипта.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # 1. Определение ОС для корректного получения вчерашней даты
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS (BSD date)
@@ -13,9 +17,9 @@ fi
 ARRIVAL_URL="https://pulkovoairport.ru/api/?type=arrival&when=-1"
 DEPARTURE_URL="https://pulkovoairport.ru/api/?type=departure&when=-1"
 
-# 3. Имена выходных файлов
-ARRIVAL_FILE="arrival-${YESTERDAY}.json"
-DEPARTURE_FILE="departure-${YESTERDAY}.json"
+# 3. Имена выходных файлов (абсолютные пути — рядом со скриптом)
+ARRIVAL_FILE="${SCRIPT_DIR}/arrival-${YESTERDAY}.json"
+DEPARTURE_FILE="${SCRIPT_DIR}/departure-${YESTERDAY}.json"
 
 # 4. User-Agent для обхода базовой защиты от ботов (имитация обычного браузера)
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
