@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-08-22 — Fixed departure/arrival tables overflowing the page layout: added min-width: 0 to table grid cards so wide tables scroll inside their own container.
+
 ## 2026-08-20 — Fixed modal popup layout on mobile: switched to dvh units with vh/percentage fallback and added compact padding for screens under 640px so the popup stays within the visible area.
 
 ## 2026-08-20 — Added clickable dates in departure/arrival tables opening a modal with all flights for the selected day, plus column sorting in tables and modal.
