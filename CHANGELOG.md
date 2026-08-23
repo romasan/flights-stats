@@ -1,6 +1,9 @@
 # Changelog
 
+## 2026-08-23 — Rewrote project as a Node.js server (Express + better-sqlite3): built-in daily scheduler with retries replaces cron, added REST API serving only display-ready data, SQLite storage with raw JSON archived on disk, unit-based airport config for future multi-airport support, and an airport dropdown on the frontend; removed fetch_flights.sh and legacy JSON/log files in favor of a one-time migration script.
+
 ## 2026-08-23 — Fixed fetch_flights.sh saving JSON files to the script directory regardless of the working directory when run from cron.
+
 
 ## 2026-08-22 — Added summary cards showing total canceled/delayed departures and arrivals with percentages, computed using the selected delay threshold.
 

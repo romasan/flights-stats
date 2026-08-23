@@ -1,0 +1,22 @@
+{
+  "name": "flights-stats",
+  "version": "2.0.0",
+  "description": "Сервер и веб-приложение для сбора и визуализации статистики рейсов аэропортов (сейчас — Пулково, LED)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "migrate": "node scripts/migrate-legacy.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.20.4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "compression": "^1.7.4",
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+# Данные приложения: SQLite БД и архив сырых JSON-ответов API
+data/
+
+*.db
+*.db-shm
+*.db-wal
+*.log

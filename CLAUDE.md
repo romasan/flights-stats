@@ -27,11 +27,14 @@
 
 Проект состоит из:
 
-- `fetch_flights.sh` — Bash-скрипт для загрузки данных о рейсах аэропорта Пулково (LED) с API в JSON-файлы.
-- `flights-stats.html` — одностраничное веб-приложение для визуализации статистики рейсов (Chart.js, chartjs-plugin-datalabels, chartjs-chart-matrix).
+- `server/` — Node.js-сервер (Express + better-sqlite3): статика, REST API, планировщик ежедневного сбора данных с ретраями (без cron), конфигурации аэропортов в `server/units/`.
+- `public/index.html` — одностраничное веб-приложение для визуализации статистики рейсов (Chart.js, chartjs-plugin-datalabels, chartjs-chart-matrix), получает данные через API сервера.
+- `scripts/migrate-legacy.js` — разовый скрипт миграции старых `*.json`/`fetch_flights.log` файлов в SQLite.
+- `data/` — SQLite БД и архив сырых JSON-ответов API (не в git).
 - `README.md` — документация проекта (на русском языке).
 - `CLAUDE.md` — данный файл с инструкциями для Cline.
 - `CHANGELOG.md` — журнал изменений (на английском языке).
+
 
 Подробное описание архитектуры и логики работы — в `README.md`.
 
