@@ -4,9 +4,9 @@ const units = require('./units');
 const store = require('./store');
 const { fetchAndStoreOne } = require('./fetcher');
 
-const RUN_HOUR = Number(process.env.FETCH_HOUR || 1); // час запуска ежедневного сбора (0-23)
-const RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 60 * 60 * 1000); // 1 час
-const MAX_ATTEMPTS = Number(process.env.FETCH_MAX_ATTEMPTS || 4); // 1 попытка + 3 ретрая
+const RUN_HOUR = Number(process.env.FETCH_HOUR || 1); // час запуска ежедневного сбора (для daily-юнитов)
+const DEFAULT_RETRY_DELAY_MS = Number(process.env.FETCH_RETRY_DELAY_MS || 60 * 60 * 1000); // 1 час
+const DEFAULT_MAX_ATTEMPTS = Number(process.env.FETCH_MAX_ATTEMPTS || 4); // 1 попытка + 3 ретрая
 
 function yesterdayFileDate(now = new Date()) {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -16,86 +16,134 @@ function yesterdayFileDate(now = new Date()) {
   return `${y}${m}${day}`;
 }
 
+/** Текущая дата (YYYYMMDD) в заданном часовом поясе. */
+function todayFileDate(timeZone = 'UTC', now = new Date()) {
+  const parts = {};
+  for (const p of new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now)) {
+    parts[p.type] = p.value;
+  }
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Ретраи конкретного юнита (переопределяют глобальные значения). */
+function retryConfig(unit) {
+  return {
+    retryDelayMs: unit.retryDelayMs != null ? unit.retryDelayMs : DEFAULT_RETRY_DELAY_MS,
+    maxAttempts: unit.maxAttempts != null ? unit.maxAttempts : DEFAULT_MAX_ATTEMPTS
+  };
+}
+
 /**
  * Пытается загрузить один тип рейсов с ретраями: при неудаче ждёт
- * RETRY_DELAY_MS и повторяет, всего до MAX_ATTEMPTS попыток. Итог (успех или
+ * retryDelayMs и повторяет, всего до maxAttempts попыток. Итог (успех или
  * ошибка после всех попыток) фиксируется в таблице fetch_log.
  */
 async function fetchWithRetries(unit, type, fileDate, log) {
+  const { retryDelayMs, maxAttempts } = retryConfig(unit);
   let lastError = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const count = await fetchAndStoreOne(unit, type, fileDate);
       store.recordFetchResult(unit.code, type, fileDate, 'success', attempt, null);
-      log(`✅ [${unit.code}/${type}] ${fileDate}: сохранено ${count} рейсов (попытка ${attempt}/${MAX_ATTEMPTS})`);
+      log(`✅ [${unit.code}/${type}] ${fileDate}: сохранено ${count} рейсов (попытка ${attempt}/${maxAttempts})`);
       return true;
     } catch (err) {
       lastError = err;
-      log(`❌ [${unit.code}/${type}] ${fileDate}: ошибка попытки ${attempt}/${MAX_ATTEMPTS} — ${err.message}`);
-      if (attempt < MAX_ATTEMPTS) {
-        await sleep(RETRY_DELAY_MS);
+      log(`❌ [${unit.code}/${type}] ${fileDate}: ошибка попытки ${attempt}/${maxAttempts} — ${err.message}`);
+      if (attempt < maxAttempts) {
+        await sleep(retryDelayMs);
       }
     }
   }
   store.recordFetchResult(
-    unit.code, type, fileDate, 'error', MAX_ATTEMPTS,
+    unit.code, type, fileDate, 'error', maxAttempts,
     lastError ? lastError.message : 'unknown error'
   );
   return false;
 }
 
-/** Запускает сбор данных за вчера для всех аэропортов и обоих типов рейсов. */
-async function runDailyFetch(log = console.log) {
-  const fileDate = yesterdayFileDate();
-  log(`📅 Начинаем загрузку данных за ${fileDate}...`);
-  for (const unit of units.list) {
-    for (const type of ['arrival', 'departure']) {
-      // Не перезапрашиваем то, что уже успешно загружено (например, при
-      // рестарте сервера в тот же день).
+/**
+ * Запускает сбор данных для одного аэропорта за его целевую дату
+ * (вчера для daily-юнитов, сегодня для interval-юнитов) по обоим типам рейсов.
+ */
+async function runUnitFetch(unit, log = console.log) {
+  const fileDate = unit.dateMode === 'today'
+    ? todayFileDate(unit.timeZone || 'UTC')
+    : yesterdayFileDate();
+  log(`📅 [${unit.code}] загружаем данные за ${fileDate} (${unit.dateMode})`);
+  for (const type of ['arrival', 'departure']) {
+    // Для вчерашних данных не перезапрашиваем уже успешно загруженное
+    // (например, при рестарте сервера в тот же день). Для «сегодня» всегда
+    // обновляем статусы по интервалу.
+    if (unit.dateMode !== 'today') {
       const existing = store.getFetchLogEntry(unit.code, type, fileDate);
       if (existing && existing.status === 'success') {
         log(`↷ [${unit.code}/${type}] ${fileDate}: уже загружено, пропускаем`);
         continue;
       }
-      await fetchWithRetries(unit, type, fileDate, log);
     }
+    await fetchWithRetries(unit, type, fileDate, log);
   }
-  log('🎉 Готово!');
 }
 
-function msUntilNextRun(now = new Date()) {
+function msUntilNextDailyRun(now, hour) {
   const next = new Date(now);
-  next.setHours(RUN_HOUR, 0, 0, 0);
+  next.setHours(hour, 0, 0, 0);
   if (next <= now) next.setDate(next.getDate() + 1);
   return next.getTime() - now.getTime();
 }
 
-let dailyTimer = null;
+const timers = new Map();
 
-function scheduleNextRun(log = console.log) {
-  const delay = msUntilNextRun();
-  const runAt = new Date(Date.now() + delay);
-  log(`⏰ Следующий сбор данных запланирован на ${runAt.toLocaleString('ru-RU')}`);
-  dailyTimer = setTimeout(async () => {
-    try {
-      await runDailyFetch(log);
-    } catch (err) {
-      log(`❌ Непредвиденная ошибка планового сбора: ${err.message}`);
+/**
+ * Планирует следующий запуск сбора для одного юнита. У interval-юнитов
+ * (например, UFA) первый запуск происходит сразу при старте сервера, далее —
+ * через intervalMs. У daily-юнитов (LED) — в заданный час (unit.fetchHour или RUN_HOUR).
+ */
+function scheduleUnit(unit, log, first = false) {
+  if (timers.has(unit.code)) clearTimeout(timers.get(unit.code));
+
+  let delay;
+  if (unit.schedule === 'interval') {
+    delay = first ? 0 : (unit.intervalMs || DEFAULT_RETRY_DELAY_MS);
+    if (!first) {
+      log(`⏰ [${unit.code}] следующий сбор через ${Math.round(delay / 60000)} мин`);
     }
-    scheduleNextRun(log);
+  } else {
+    const hour = unit.fetchHour != null ? unit.fetchHour : RUN_HOUR;
+    delay = msUntilNextDailyRun(new Date(), hour);
+    const runAt = new Date(Date.now() + delay);
+    log(`⏰ [${unit.code}] следующий сбор запланирован на ${runAt.toLocaleString('ru-RU')}`);
+  }
+
+  const timer = setTimeout(async () => {
+    try {
+      await runUnitFetch(unit, log);
+    } catch (err) {
+      log(`❌ [${unit.code}] Непредвиденная ошибка планового сбора: ${err.message}`);
+    }
+    scheduleUnit(unit, log, false);
   }, delay);
+  timers.set(unit.code, timer);
 }
 
 function start(log = console.log) {
-  scheduleNextRun(log);
+  for (const unit of units.list) scheduleUnit(unit, log, true);
 }
 
 function stop() {
-  if (dailyTimer) clearTimeout(dailyTimer);
+  for (const t of timers.values()) clearTimeout(t);
+  timers.clear();
 }
 
-module.exports = { start, stop, runDailyFetch, yesterdayFileDate, fetchWithRetries };
+module.exports = { start, stop, runUnitFetch, fetchWithRetries, yesterdayFileDate, todayFileDate };
+

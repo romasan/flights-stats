@@ -4,8 +4,9 @@
 // модуль наподобие led.js и добавьте его сюда.
 
 const led = require('./led');
+const ufa = require('./ufa');
 
-const UNITS = [led];
+const UNITS = [led, ufa];
 
 const byCode = new Map(UNITS.map(u => [u.code, u]));
 

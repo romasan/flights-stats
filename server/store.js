@@ -43,6 +43,24 @@ const replaceFlights = db.transaction((unitCode, type, fileDate, flights) => {
   }
 });
 
+const mergeFlights = db.transaction((unitCode, type, fileDate, flights) => {
+  for (const f of flights) {
+    upsertFlightsStmt.run({
+      unitCode,
+      type,
+      fileDate,
+      externalId: f.externalId != null ? String(f.externalId) : `noid-${Math.random()}`,
+      flightNumber: f.flightNumber,
+      status: f.status,
+      plan: f.plan,
+      actual: f.actual,
+      eventDate: f.eventDate,
+      airportCode: f.airportCode,
+      airportName: f.airportName
+    });
+  }
+});
+
 const upsertFetchLogStmt = db.prepare(`
   INSERT INTO fetch_log (unit_code, type, file_date, status, attempts, message, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -79,6 +97,11 @@ module.exports = {
   /** Заменяет весь набор рейсов для указанного (unit, type, fileDate). */
   replaceFlights(unitCode, type, fileDate, flights) {
     replaceFlights(unitCode, type, fileDate, flights);
+  },
+
+  /** Дополняет/обновляет рейсы по (unit, type, fileDate, external_id), не удаляя уже сохранённые. */
+  mergeFlights(unitCode, type, fileDate, flights) {
+    mergeFlights(unitCode, type, fileDate, flights);
   },
 
   recordFetchResult(unitCode, type, fileDate, status, attempts, message) {
