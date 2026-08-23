@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-08-24 — Reworked npm scripts: renamed start to dev, added pm2-based start/stop/logs (pm2 as devDependency) and updated README accordingly.
+
 ## 2026-08-23 — Added UFA airport (Ufa) with hourly schedule fetching current-day flights via POST and HTML parsing, accumulating by external ID; scheduler now runs per unit with per-unit retry settings.
 
 ## 2026-08-23 — Rewrote project as a Node.js server (Express + better-sqlite3): built-in daily scheduler with retries replaces cron, added REST API serving only display-ready data, SQLite storage with raw JSON archived on disk, unit-based airport config for future multi-airport support, and an airport dropdown on the frontend; removed fetch_flights.sh and legacy JSON/log files in favor of a one-time migration script.

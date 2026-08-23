@@ -119,8 +119,18 @@ node scripts/migrate-legacy.js --src=/path/to/old/files --log=/path/to/fetch_fli
 
 ### Запуск сервера
 
+Для локальной разработки:
+
 ```bash
-npm start
+npm run dev
+```
+
+Для запуска в фоне на сервере используется [pm2](https://pm2.io/) (устанавливается автоматически как devDependency при `npm install`):
+
+```bash
+npm start   # запустить под pm2 с именем процесса flights-stats и сохранить конфигурацию (pm2 save)
+npm run stop   # остановить процесс flights-stats
+npm run logs   # смотреть логи процесса flights-stats
 ```
 
 Сервер поднимает HTTP на порту `3000` (можно изменить через переменную окружения `PORT`), раздаёт статику из `public/`, отвечает на `/api/*` и запускает встроенный планировщик ежедневного сбора данных (сбор не требует cron — работает, пока запущен процесс сервера).
@@ -137,14 +147,6 @@ npm start
 | `FETCH_MAX_ATTEMPTS` | `4` | Максимум попыток на один тип рейсов (1 + 3 ретрая; значение по умолчанию; может переопределяться в конфиге юнита — `maxAttempts`) |
 
 Параметры расписания и ретраев задаются в конфиге юнита (`server/units/<code>.js`): `schedule` (`daily` | `interval`), `intervalMs`, `fetchHour`, `maxAttempts`, `retryDelayMs`, `dateMode` (`yesterday` | `today`), `timeZone`. Если они не заданы — используются глобальные значения из таблицы выше.
-
-Для запуска в фоне на сервере удобно использовать pm2:
-
-```bash
-npm install -g pm2
-pm2 start server/index.js --name flights-stats
-pm2 save
-```
 
 ### Просмотр статистики
 

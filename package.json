@@ -4,7 +4,10 @@
   "description": "Сервер и веб-приложение для сбора и визуализации статистики рейсов аэропортов",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "start": "pm2 start server/index.js --name flights-stats && pm2 save",
+    "stop": "pm2 stop flights-stats",
+    "logs": "pm2 logs flights-stats",
     "migrate": "node scripts/migrate-legacy.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,5 +21,8 @@
     "better-sqlite3": "^11.3.0",
     "compression": "^1.7.4",
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "pm2": "^7.0.3"
   }
 }
