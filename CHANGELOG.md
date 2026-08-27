@@ -1,5 +1,6 @@
 # Changelog
 
+## 2026-08-25 — Added .env support via dotenv for PORT; added .env/.env.example and added .env to .gitignore.
 ## 2026-08-24 — Reworked npm scripts: renamed start to dev, added pm2-based start/stop/logs (pm2 as devDependency) and updated README accordingly.
 
 ## 2026-08-23 — Added UFA airport (Ufa) with hourly schedule fetching current-day flights via POST and HTML parsing, accumulating by external ID; scheduler now runs per unit with per-unit retry settings.
