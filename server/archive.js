@@ -16,18 +16,25 @@ function rawFilePath(unitCode, type, fileDate) {
   return { dir, file: path.join(dir, `${type}-${fileDate}.json`) };
 }
 
-/** Сохраняет сырой ответ API (уже распарсенный JS-массив/объект) на диск. */
+/** Сохраняет сырой ответ на диск. Объекты/массивы (LED, UFA) пишутся как JSON;
+ *  строки (например, HTML-табло OVB) сохраняются как есть — для удобного просмотра. */
 function saveRaw(unitCode, type, fileDate, data) {
   const { dir, file } = rawFilePath(unitCode, type, fileDate);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data));
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  fs.writeFileSync(file, text);
   return file;
 }
 
 function readRaw(unitCode, type, fileDate) {
   const { file } = rawFilePath(unitCode, type, fileDate);
   if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  const text = fs.readFileSync(file, 'utf8');
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return text; // сырой текст (например, HTML-табло OVB)
+  }
 }
 
 module.exports = { DATA_DIR, RAW_DIR, saveRaw, readRaw, rawFilePath };

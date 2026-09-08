@@ -5,8 +5,9 @@
 
 const led = require('./led');
 const ufa = require('./ufa');
+const ovb = require('./ovb');
 
-const UNITS = [led, ufa];
+const UNITS = [led, ufa, ovb];
 
 const byCode = new Map(UNITS.map(u => [u.code, u]));
 

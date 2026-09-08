@@ -33,11 +33,20 @@ async function fetchResponse(request, userAgent) {
  * и unit.parseFlights(raw, type, fileDate).
  */
 async function fetchAndStoreOne(unit, type, fileDate) {
-  const request = unit.buildRequest
-    ? unit.buildRequest(type, fileDate)
-    : { url: unit.urls[type], method: 'GET' };
-  const raw = await fetchResponse(request, unit.userAgent);
+  // Юниты с собственной загрузкой (например, OVB, где нужен headless-браузер
+  // для обхода JS-челленджа) возвращают «сырой» ответ через unit.fetchRawHtml.
+  // Остальные идут по обычному HTTP-пути (buildRequest или urls[]).
+  let raw;
+  if (unit.fetchRawHtml) {
+    raw = await unit.fetchRawHtml(type, fileDate);
+  } else {
+    const request = unit.buildRequest
+      ? unit.buildRequest(type, fileDate)
+      : { url: unit.urls[type], method: 'GET' };
+    raw = await fetchResponse(request, unit.userAgent);
+  }
   archive.saveRaw(unit.code, type, fileDate, raw);
+
   const flights = unit.parseFlights
     ? unit.parseFlights(raw, type, fileDate)
     : raw.map(item => unit.parseFlight(item, type));

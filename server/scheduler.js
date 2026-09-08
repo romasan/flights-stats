@@ -30,6 +30,32 @@ function todayFileDate(timeZone = 'UTC', now = new Date()) {
   return `${parts.year}${parts.month}${parts.day}`;
 }
 
+/** Сдвиг даты YYYYMMDD на days календарных дней (в UTC-арифметике). */
+function shiftFileDate(yyyymmdd, days) {
+  const y = +yyyymmdd.slice(0, 4);
+  const m = +yyyymmdd.slice(4, 6);
+  const d = +yyyymmdd.slice(6, 8);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  const Y = dt.getUTCFullYear();
+  const M = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const D = String(dt.getUTCDate()).padStart(2, '0');
+  return `${Y}${M}${D}`;
+}
+
+/** Дата «вчера» в заданном часовом поясе (для фиксированных поясов без DST). */
+function yesterdayFileDateInTz(timeZone, now = new Date()) {
+  return shiftFileDate(todayFileDate(timeZone, now), -1);
+}
+
+/**
+ * Целевая дата (YYYYMMDD) сбора для юнита: «сегодня» для dateMode='today'
+ * (по поясу юнита), иначе — «вчера» (по поясу юнита либо по локальному времени).
+ */
+function unitFileDate(unit, now) {
+  if (unit.dateMode === 'today') return todayFileDate(unit.timeZone || 'UTC', now);
+  return unit.timeZone ? yesterdayFileDateInTz(unit.timeZone, now) : yesterdayFileDate(now);
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -40,6 +66,14 @@ function retryConfig(unit) {
     retryDelayMs: unit.retryDelayMs != null ? unit.retryDelayMs : DEFAULT_RETRY_DELAY_MS,
     maxAttempts: unit.maxAttempts != null ? unit.maxAttempts : DEFAULT_MAX_ATTEMPTS
   };
+}
+
+/** Есть ли успешно загруженные данные обоих типов рейсов за дату (YYYYMMDD). */
+function unitHasDataFor(unit, fileDate) {
+  return ['arrival', 'departure'].every(type => {
+    const entry = store.getFetchLogEntry(unit.code, type, fileDate);
+    return entry && entry.status === 'success';
+  });
 }
 
 /**
@@ -76,9 +110,7 @@ async function fetchWithRetries(unit, type, fileDate, log) {
  * (вчера для daily-юнитов, сегодня для interval-юнитов) по обоим типам рейсов.
  */
 async function runUnitFetch(unit, log = console.log) {
-  const fileDate = unit.dateMode === 'today'
-    ? todayFileDate(unit.timeZone || 'UTC')
-    : yesterdayFileDate();
+  const fileDate = unitFileDate(unit);
   log(`📅 [${unit.code}] загружаем данные за ${fileDate} (${unit.dateMode})`);
   for (const type of ['arrival', 'departure']) {
     // Для вчерашних данных не перезапрашиваем уже успешно загруженное
@@ -107,7 +139,10 @@ const timers = new Map();
 /**
  * Планирует следующий запуск сбора для одного юнита. У interval-юнитов
  * (например, UFA) первый запуск происходит сразу при старте сервера, далее —
- * через intervalMs. У daily-юнитов (LED) — в заданный час (unit.fetchHour или RUN_HOUR).
+ * через intervalMs. У daily-юнитов (LED, OVB) сбор идёт за «вчера» в заданный час
+ * (unit.fetchHour или RUN_HOUR); если при старте сервера данных за «вчера» ещё нет
+ * (например, после ночного простоя сервера), первый запуск выполняется сразу,
+ * чтобы не потерять сутки, а затем сервер возвращается к обычному ежедневному расписанию.
  */
 function scheduleUnit(unit, log, first = false) {
   if (timers.has(unit.code)) clearTimeout(timers.get(unit.code));
@@ -119,10 +154,19 @@ function scheduleUnit(unit, log, first = false) {
       log(`⏰ [${unit.code}] следующий сбор через ${Math.round(delay / 60000)} мин`);
     }
   } else {
+    const now = new Date();
     const hour = unit.fetchHour != null ? unit.fetchHour : RUN_HOUR;
-    delay = msUntilNextDailyRun(new Date(), hour);
-    const runAt = new Date(Date.now() + delay);
-    log(`⏰ [${unit.code}] следующий сбор запланирован на ${runAt.toLocaleString('ru-RU')}`);
+    // Ежедневный юнит собирает «вчерашние» данные (dateMode != 'today'). Если
+    // данных за целевую дату ещё нет — при старте запускаемся немедленно.
+    const targetDate = unitFileDate(unit, now);
+    const needStartupFetch = first && unit.dateMode !== 'today' && !unitHasDataFor(unit, targetDate);
+    delay = needStartupFetch ? 0 : msUntilNextDailyRun(now, hour);
+    if (needStartupFetch) {
+      log(`🚀 [${unit.code}] данных за ${targetDate} ещё нет — собираем сразу при старте сервера`);
+    } else {
+      const runAt = new Date(Date.now() + delay);
+      log(`⏰ [${unit.code}] следующий сбор запланирован на ${runAt.toLocaleString('ru-RU')}`);
+    }
   }
 
   const timer = setTimeout(async () => {

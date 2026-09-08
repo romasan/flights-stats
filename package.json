@@ -22,7 +22,8 @@
     "better-sqlite3": "^11.3.0",
     "compression": "^1.7.4",
     "dotenv": "^17.4.2",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "playwright-core": "1.57.0"
   },
   "devDependencies": {
     "pm2": "^7.0.3"

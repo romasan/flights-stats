@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-09-09 — On server start, daily "yesterday" units (LED, OVB) now immediately fetch missing data for yesterday instead of waiting for FETCH_HOUR, avoiding a lost day after overnight downtime.
+## 2026-09-08 — Added Tolmachevo (OVB) airport: daily "yesterday" collection through headless Chromium (playwright-core) to bypass the site's JS cookie challenge; parses mixed arrival/departure HTML cards and treats "yesterday" in Asia/Novosibirsk; fetcher now supports units that fetch via a browser (fetchRawHtml) and archive can store raw HTML as text.
 ## 2026-09-08 — Store original airport status in a new DB column status_raw and added scripts/migrate-ufa-status.js to backfill existing UFA rows; the flight popup shows the original status.
 ## 2026-09-08 — Normalized UFA flight statuses at parse time to the canonical LED set (Отправлен/Прибыл, Задержан, Отмена, Без статуса).
 
