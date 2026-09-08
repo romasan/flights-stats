@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-09-08 — Store original airport status in a new DB column status_raw and added scripts/migrate-ufa-status.js to backfill existing UFA rows; the flight popup shows the original status.
+## 2026-09-08 — Normalized UFA flight statuses at parse time to the canonical LED set (Отправлен/Прибыл, Задержан, Отмена, Без статуса).
+
 ## 2026-08-25 — Added .env support via dotenv for PORT; added .env/.env.example and added .env to .gitignore.
 ## 2026-08-24 — Reworked npm scripts: renamed start to dev, added pm2-based start/stop/logs (pm2 as devDependency) and updated README accordingly.
 

@@ -849,6 +849,12 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
     .map(f => {
       const planRaw = f.plan || '';
       const actRaw = f.actual || '';
+      const status = effectiveStatus(f, threshold); // канонический статус (для цвета/сортировки/группировки)
+      // В тексте показываем исходный статус с сайта аэропорта (УФА: «Вылетел»,
+      // «Задержка», «Отменен» и т.п.), иначе — канонический статус.
+      const rawText = typeof f.statusRaw === 'string' && f.statusRaw.trim() !== ''
+        ? f.statusRaw.trim()
+        : status;
       return {
         f,
         label: flightLabel(f),
@@ -858,7 +864,8 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
         planDate: fmtDate(planRaw),
         actDate: fmtDate(actRaw),
         delay: delayMinutes(f),
-        status: effectiveStatus(f, threshold)
+        status,
+        text: rawText
       };
     });
 
@@ -931,7 +938,7 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
                         ${timeCell(r.act, r.planDate)}
                         ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${fmtDelay(r.delay)}</span>`}
                       </td>
-                      <td><span class="status-badge" style="background:${color}22;color:${color}">${r.status}</span></td>
+                      <td><span class="status-badge" style="background:${color}22;color:${color}">${r.text}</span></td>
                     </tr>
                   `;
                 })}

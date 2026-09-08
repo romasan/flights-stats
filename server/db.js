@@ -30,6 +30,7 @@ db.exec(`
     event_date    TEXT,                 -- YYYY-MM-DD, дата рейса для агрегации (факт → план)
     airport_code  TEXT,
     airport_name  TEXT,
+    status_raw    TEXT,                  -- исходный статус с сайта аэропорта (до нормализации)
     UNIQUE(unit_code, type, file_date, external_id)
   );
 
@@ -48,5 +49,13 @@ db.exec(`
     UNIQUE(unit_code, type, file_date)
   );
 `);
+
+// Идемпотентная миграция схемы: добавляем колонку status_raw в уже существующие
+// базы (в свежих она уже есть в CREATE TABLE). Скрипт миграции
+// scripts/migrate-ufa-status.js заполняет её для старых рейсов Уфы.
+const flightCols = db.pragma('table_info(flights)').map(c => c.name);
+if (!flightCols.includes('status_raw')) {
+  db.exec('ALTER TABLE flights ADD COLUMN status_raw TEXT');
+}
 
 module.exports = db;

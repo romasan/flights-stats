@@ -46,9 +46,26 @@ const pick = (re, s, idx = 1) => {
   return m ? (m[idx] || '').trim() : '';
 };
 
+// Приводит «сырой» статус рейса с сайта Уфы к каноническому виду, который
+// понимает остальной код (агрегация, графики, расчёт задержек по времени).
+// Возвращает null (значит «Без статуса» на фронтенде) для всех прочих
+// значений (Ожидается, В пути, Посадка завершена, Идет регистрация, …).
+// Сравнение по ключевым словам: «задерж» → Задержан, «отмен» → Отмена,
+// выполненный вылет → Отправлен / прилёт → Прибыл.
+const canonicalStatus = (raw, type) => {
+  const s = (raw == null ? '' : String(raw)).trim().toLowerCase();
+  if (!s) return null;
+  if (s.includes('задерж')) return 'Задержан';
+  if (s.includes('отмен')) return 'Отмена';
+  if (type === 'departure' && s.includes('вылет')) return 'Отправлен';
+  if (type === 'arrival' && (s.includes('прилет') || s.includes('прибыл'))) return 'Прибыл';
+  return null;
+};
+
 module.exports = {
   code: 'UFA',
   name: 'Уфа',
+  normalizeStatus: canonicalStatus, // переиспользуется скриптом миграции старых данных
   userAgent: USER_AGENT,
 
   // Расписание и ретраи, переопределяющие глобальные настройки планировщика.
@@ -122,10 +139,16 @@ module.exports = {
         plan = `${eventDate}T${current}:00`;
       }
 
+      // Исходный статус сайта Уфы (например, «Вылетел», «Задержка», «Отменен»,
+      // «Ожидается»). В status кладём канонический статус (для агрегации/графиков),
+      // а исходный текст сохраняем в statusRaw — он показывается в попапе.
+      const rawStatus = pick(/b-scoreboard-card__td_status[\s\S]*?<strong>([\s\S]*?)<\/strong>/, block) || null;
+
       flights.push({
         externalId: id,
         flightNumber: pick(/b-scoreboard-card__td_number[\s\S]*?<strong>([\s\S]*?)<\/strong>/, block) || null,
-        status: pick(/b-scoreboard-card__td_status[\s\S]*?<strong>([\s\S]*?)<\/strong>/, block) || null,
+        status: canonicalStatus(rawStatus, type),
+        statusRaw: rawStatus || null,
         plan,
         actual,
         airportCode: pick(/b-scoreboard-card__label">([\s\S]*?)<\/span>/, block) || null,

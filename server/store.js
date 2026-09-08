@@ -5,14 +5,15 @@ const db = require('./db');
 const upsertFlightsStmt = db.prepare(`
   INSERT INTO flights (
     unit_code, type, file_date, external_id, flight_number,
-    status_ru, plan_time, actual_time, event_date, airport_code, airport_name
+    status_ru, status_raw, plan_time, actual_time, event_date, airport_code, airport_name
   ) VALUES (
     @unitCode, @type, @fileDate, @externalId, @flightNumber,
-    @status, @plan, @actual, @eventDate, @airportCode, @airportName
+    @status, @statusRaw, @plan, @actual, @eventDate, @airportCode, @airportName
   )
   ON CONFLICT(unit_code, type, file_date, external_id) DO UPDATE SET
     flight_number = excluded.flight_number,
     status_ru     = excluded.status_ru,
+    status_raw    = excluded.status_raw,
     plan_time     = excluded.plan_time,
     actual_time   = excluded.actual_time,
     event_date    = excluded.event_date,
@@ -34,6 +35,7 @@ const replaceFlights = db.transaction((unitCode, type, fileDate, flights) => {
       externalId: f.externalId != null ? String(f.externalId) : `noid-${Math.random()}`,
       flightNumber: f.flightNumber,
       status: f.status,
+      statusRaw: f.statusRaw || null,
       plan: f.plan,
       actual: f.actual,
       eventDate: f.eventDate,
@@ -52,6 +54,7 @@ const mergeFlights = db.transaction((unitCode, type, fileDate, flights) => {
       externalId: f.externalId != null ? String(f.externalId) : `noid-${Math.random()}`,
       flightNumber: f.flightNumber,
       status: f.status,
+      statusRaw: f.statusRaw || null,
       plan: f.plan,
       actual: f.actual,
       eventDate: f.eventDate,
@@ -72,7 +75,8 @@ const upsertFetchLogStmt = db.prepare(`
 `);
 
 const getFlightsStmt = db.prepare(`
-  SELECT file_date AS fileDate, flight_number AS flightNumber, status_ru AS status,
+  SELECT file_date AS fileDate, flight_number AS flightNumber,
+         status_ru AS status, status_raw AS statusRaw,
          plan_time AS plan, actual_time AS actual, event_date AS eventDate,
          airport_code AS airportCode, airport_name AS airportName
   FROM flights

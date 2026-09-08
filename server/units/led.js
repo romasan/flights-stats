@@ -35,10 +35,12 @@ module.exports = {
     if (type === 'arrival') {
       const plan = raw.OA_STA || null;
       const actual = raw.OA_ATA || null;
+      const status = trimOrNull(raw.OA_STATUS_RU);
       return {
         externalId: raw.OA_ID || null,
         flightNumber: trimOrNull(raw.OA_FLIGHT_NUMBER),
-        status: trimOrNull(raw.OA_STATUS_RU),
+        status,
+        statusRaw: status, // у LED исходный статус уже канонический
         plan,
         actual,
         airportCode: trimOrNull(raw.OA_RAP_CODE_ORIGIN),
@@ -50,10 +52,12 @@ module.exports = {
     // departure
     const plan = raw.OD_STD || null;
     const actual = raw.OD_ATD || null;
+    const status = trimOrNull(raw.OD_STATUS_RU);
     return {
       externalId: raw.OD_ID || null,
       flightNumber: trimOrNull(raw.OD_FLIGHT_NUMBER),
-      status: trimOrNull(raw.OD_STATUS_RU),
+      status,
+      statusRaw: status, // у LED исходный статус уже канонический
       plan,
       actual,
       airportCode: trimOrNull(raw.OD_RAP_CODE_DESTINATION),

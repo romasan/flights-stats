@@ -9,6 +9,7 @@
     "stop": "pm2 stop flights-stats",
     "logs": "pm2 logs flights-stats",
     "migrate": "node scripts/migrate-legacy.js",
+    "migrate:ufa-status": "node scripts/migrate-ufa-status.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
