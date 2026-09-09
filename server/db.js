@@ -51,8 +51,7 @@ db.exec(`
 `);
 
 // Идемпотентная миграция схемы: добавляем колонку status_raw в уже существующие
-// базы (в свежих она уже есть в CREATE TABLE). Скрипт миграции
-// scripts/migrate-ufa-status.js заполняет её для старых рейсов Уфы.
+// базы (в свежих она уже есть в CREATE TABLE).
 const flightCols = db.pragma('table_info(flights)').map(c => c.name);
 if (!flightCols.includes('status_raw')) {
   db.exec('ALTER TABLE flights ADD COLUMN status_raw TEXT');

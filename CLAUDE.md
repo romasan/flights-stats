@@ -29,8 +29,6 @@
 
 - `server/` — Node.js-сервер (Express + better-sqlite3): статика, REST API, планировщик ежедневного сбора данных с ретраями (без cron), конфигурации аэропортов в `server/units/`.
 - `public/index.html` — одностраничное веб-приложение для визуализации статистики рейсов (Chart.js, chartjs-plugin-datalabels, chartjs-chart-matrix), получает данные через API сервера.
-- `scripts/migrate-legacy.js` — разовый скрипт миграции старых `*.json`/`fetch_flights.log` файлов в SQLite.
-- `scripts/migrate-ufa-status.js` — разовый скрипт нормализации статусов уже сохранённых рейсов UFA (заполняет `status_raw`, пересчитывает `status_ru` в канонический вид).
 - `data/` — SQLite БД и архив сырых JSON-ответов API (не в git).
 - `README.md` — документация проекта (на русском языке).
 - `CLAUDE.md` — данный файл с инструкциями для Cline.
