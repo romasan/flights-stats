@@ -1,5 +1,6 @@
 # Changelog
 
+## 2026-09-10 — Added Sochi (AER): hourly plain-HTTP polling of the current-day Bitrix online board (aer.aero, HTML arrives without a browser), accumulating current-day flights by external ID (merge); selects arrival/departure by card class, takes planned time from row data-attributes and actual time only for completed flights from the dated "actual" row.
 ## 2026-09-10 — Added Domodedovo (DME): hourly plain-HTTP polling of the rolling live-board window, accumulating current-day flights by external ID (merge) into a full "yesterday" by day's end.
 ## 2026-09-09 — Added Vnukovo (VKO): daily "yesterday" via headless Chromium (JS challenge + client-side decryption); counts flights/cancellations (actual times mostly absent, delays best-effort).
 ## 2026-09-09 — Added Sheremetyevo (SVO): daily "yesterday" collection via public svo.aero /bitrix/timetable JSON API (full day per date); canonical statuses derived from actual times.

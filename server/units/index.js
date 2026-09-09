@@ -9,8 +9,9 @@ const ovb = require('./ovb');
 const svo = require('./svo');
 const vko = require('./vko');
 const dme = require('./dme');
+const aer = require('./aer');
 
-const UNITS = [led, ufa, ovb, svo, vko, dme];
+const UNITS = [led, ufa, ovb, svo, vko, dme, aer];
 
 const byCode = new Map(UNITS.map(u => [u.code, u]));
 
