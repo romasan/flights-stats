@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Статистика рейсов — Пулково (LED)</title>
+<title>Статистика рейсов аэропортов</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@latest/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@latest/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@latest/dist/chartjs-chart-matrix.min.js"></script>
@@ -29,7 +29,7 @@
   }
   h1 { font-size: 24px; color: #1e293b; }
   h1 small { font-weight: normal; font-size: 14px; color: #64748b; display: block; margin-top: 4px; }
-  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .status-bar {
     font-size: 13px;
     color: #64748b;
@@ -38,6 +38,16 @@
     padding: 8px 12px;
   }
   .status-bar.error { background: #fee2e2; color: #b91c1c; }
+  .unit-select {
+    font: inherit;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+    cursor: pointer;
+  }
+  .unit-select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
   .charts-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -261,22 +271,7 @@ const { h, render } = preact;
 const { useState, useEffect, useRef, useMemo } = preactHooks;
 const html = htm.bind(h);
 
-// === Константы и данные ===
-const BASE = document.location.href.replace(/\/[^\/]*$/, '/');
-
-const KEY_STATUS = {
-  departure: 'OD_STATUS_RU',
-  arrival:   'OA_STATUS_RU'
-};
-const KEY_ACTUAL = {
-  departure: 'OD_ATD',
-  arrival:   'OA_ATA'
-};
-const KEY_PLAN = {
-  departure: 'OD_STD',
-  arrival:   'OA_STA'
-};
-
+// === Константы ===
 const PRIORITY_STATUS = { 'Отправлен': 0, 'Прибыл': 0, 'Задержан': 1, 'Отмена': 2 };
 const NO_STATUS = 'Без статуса';
 
@@ -314,31 +309,24 @@ const PALETTE = [
   '#3b82f6', '#ef4444', '#22c55e', '#6366f1'
 ];
 
+// === Вспомогательные функции работы с рейсом ===
+// Каждый рейс, полученный от API, имеет единый нормализованный вид:
+// { fileDate, flightNumber, status, plan, actual, eventDate, airportCode, airportName }
+
 const fmtDate = s => {
   const m = String(s || '').match(/^(\d{4}-\d{2}-\d{2})/);
   return m ? m[1] : null;
 };
 
-const statusRu = (flight, type) => {
-  const s = flight[KEY_STATUS[type]];
+const statusRu = flight => {
+  const s = flight.status;
   if (typeof s !== 'string' || s.trim() === '') return NO_STATUS;
   return s.trim();
-};
-
-const actualDate = (flight, type) => {
-  const a = flight[KEY_ACTUAL[type]];
-  const p = flight[KEY_PLAN[type]];
-  return fmtDate(a) || fmtDate(p);
 };
 
 const fmtDisplayDate = d => {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
-};
-
-const fmtTime = s => {
-  const m = String(s || '').match(/T(\d{2}):(\d{2})/);
-  return m ? `${m[1]}:${m[2]}` : '—';
 };
 
 const timeCell = (s, otherDate) => {
@@ -352,41 +340,16 @@ const timeCell = (s, otherDate) => {
   return time;
 };
 
-const flightLabel = (f, type) => (f[KEY_FLIGHT[type]] || '').trim();
+const flightLabel = f => (f.flightNumber || '').trim();
 
-const flightDir = (f, type) => {
-  const arr = flightAirport(f, type);
-  return arr && arr.name ? `${arr.code} · ${arr.name}` : (arr ? arr.code : '—');
+const flightDir = f => {
+  if (!f.airportCode && !f.airportName) return '—';
+  return f.airportName ? `${f.airportCode} · ${f.airportName}` : f.airportCode;
 };
 
-const KEY_FLIGHT = {
-  departure: 'OD_FLIGHT_NUMBER',
-  arrival:   'OA_FLIGHT_NUMBER'
-};
-
-const KEY_AIRPORT = {
-  departure: 'OD_RAP_DESTINATION_NAME_RU',
-  arrival:   'OA_RAP_ORIGIN_NAME_RU'
-};
-
-const KEY_AIRPORT_CODE = {
-  departure: 'OD_RAP_CODE_DESTINATION',
-  arrival:   'OA_RAP_CODE_ORIGIN'
-};
-
-const flightAirport = (f, type) => {
-  const name = f[KEY_AIRPORT[type]];
-  const code = f[KEY_AIRPORT_CODE[type]];
-  if (!name && !code) return null;
-  return {
-    code: (code || '').trim(),
-    name: typeof name === 'string' ? name.trim() : ''
-  };
-};
-
-const delayMinutes = (f, type) => {
-  const plan = String(f[KEY_PLAN[type]] || '');
-  const act = String(f[KEY_ACTUAL[type]] || '');
+const delayMinutes = f => {
+  const plan = String(f.plan || '');
+  const act = String(f.actual || '');
   const a = plan.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   const b = act.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (a && b) {
@@ -415,17 +378,15 @@ const fmtDelay = mins => {
   return parts.join(' ');
 };
 
-const effectiveStatus = (flight, type, threshold) => {
-  const s = statusRu(flight, type);
+const effectiveStatus = (flight, threshold) => {
+  const s = statusRu(flight);
   if (threshold === null) return s;
   if (s === 'Отправлен' || s === 'Прибыл') {
-    const d = delayMinutes(flight, type);
+    const d = delayMinutes(flight);
     if (d !== null && d > 0 && d >= threshold) return 'Задержан';
   }
   return s;
 };
-
-const fmtLogDate = s => `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
 
 const pluralDays = n => {
   const mod10 = n % 10, mod100 = n % 100;
@@ -446,105 +407,40 @@ const errTagText = t =>
   : t === 'departure' ? 'вылеты'
   :                     'общая ошибка';
 
-// === Загрузка и агрегация данных ===
-async function fetchList() {
-  const resp = await fetch(BASE);
+const fmtLogDate = s => `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
+
+// === Загрузка данных с сервера ===
+async function loadUnits() {
+  const resp = await fetch('/api/units');
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const page = await resp.text();
-  const files = [];
-  const seen = new Set();
-  for (const m of page.matchAll(/(arrival|departure)-(\d{8})\.json/gi)) {
-    const file = m[0];
-    if (seen.has(file)) continue;
-    seen.add(file);
-    files.push({ type: m[1].toLowerCase(), date: m[2], file });
+  return resp.json();
+}
+
+async function loadUnitData(code) {
+  const resp = await fetch(`/api/units/${encodeURIComponent(code)}/flights`);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+
+function getExcludedDates(fetchErrors) {
+  const excludedDep = new Set();
+  const excludedArr = new Set();
+  for (const e of fetchErrors) {
+    const types = e.types || [];
+    const affectsAll = types.includes('unknown');
+    if (affectsAll || types.includes('departure')) excludedDep.add(e.date);
+    if (affectsAll || types.includes('arrival')) excludedArr.add(e.date);
   }
-  files.sort((a, b) => a.date.localeCompare(b.date));
-  return files;
+  return { excludedDep, excludedArr };
 }
 
-function parseFetchLog(text) {
-  const failedDays = [];
-  let cur = null;
-
-  const flush = () => {
-    if (!cur) return;
-    if (cur.errors.length) failedDays.push(cur);
-    cur = null;
-  };
-
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    const dateMatch = line.match(/Начинаем загрузку данных за (\d{8})/);
-    if (dateMatch) {
-      flush();
-      cur = { date: dateMatch[1], errors: [] };
-      continue;
-    }
-    if (!cur) continue;
-    if (line.includes('Загрузка прилетов')) {
-      cur.section = 'arrival';
-      continue;
-    }
-    if (line.includes('Загрузка вылетов')) {
-      cur.section = 'departure';
-      continue;
-    }
-    if (line.startsWith('❌')) {
-      const errType = line.includes('прилет')
-        ? 'arrival'
-        : line.includes('вылет')
-          ? 'departure'
-          : cur.section || 'unknown';
-      if (!cur.errors.includes(errType)) cur.errors.push(errType);
-    }
-  }
-  flush();
-
-  return failedDays;
-}
-
-async function loadFetchLog() {
-  try {
-    const resp = await fetch(BASE + 'fetch_flights.log');
-    if (!resp.ok) return [];
-    const text = await resp.text();
-    return parseFetchLog(text);
-  } catch (err) {
-    console.error('Failed to load fetch log:', err);
-    return [];
-  }
-}
-
-async function loadType(files, type) {
-  const list = files.filter(f => f.type === type);
-  const results = await Promise.allSettled(list.map(f =>
-    fetch(BASE + f.file).then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-  ));
-  const flights = [];
-  const failedDates = new Set();
-  let errors = 0;
-  results.forEach((res, i) => {
-    if (res.status === 'fulfilled' && Array.isArray(res.value)) {
-      for (const flight of res.value) flights.push({ ...flight, _fileDate: list[i].date });
-    } else {
-      errors++;
-      failedDates.add(list[i].date);
-      console.error('Failed to load:', list[i].file, res.reason);
-    }
-  });
-  return { flights, errors, total: list.length, failedDates };
-}
-
-function aggregate(flights, type, threshold) {
+// === Агрегация ===
+function aggregate(flights, threshold) {
   const byDate = new Map();
   for (const f of flights) {
-    const date = actualDate(f, type);
+    const date = f.eventDate;
     if (!date) continue;
-    const status = effectiveStatus(f, type, threshold);
+    const status = effectiveStatus(f, threshold);
     if (!byDate.has(date)) byDate.set(date, new Map());
     const m = byDate.get(date);
     m.set(status, (m.get(status) || 0) + 1);
@@ -586,24 +482,10 @@ function countStatus(agg, status) {
   return sum;
 }
 
-function getExcludedDates(failedLogDays, loadResult) {
-  const excluded = new Set(loadResult.failedDates);
-  for (const d of failedLogDays) {
-    if (d.errors.includes('unknown')) {
-      excluded.add(d.date);
-    } else {
-      for (const err of d.errors) {
-        if (err === 'arrival' || err === 'departure') excluded.add(d.date);
-      }
-    }
-  }
-  return excluded;
-}
-
-function parseFlightTime(flight, type, preferActual) {
-  const primary = preferActual ? KEY_ACTUAL[type] : KEY_PLAN[type];
-  const fallback = preferActual ? KEY_PLAN[type] : KEY_ACTUAL[type];
-  const raw = flight[primary] || flight[fallback] || '';
+function parseFlightTime(flight, preferActual) {
+  const primary = preferActual ? flight.actual : flight.plan;
+  const fallback = preferActual ? flight.plan : flight.actual;
+  const raw = primary || fallback || '';
   const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!m) return null;
   const year = +m[1], month = +m[2] - 1, day = +m[3];
@@ -611,16 +493,16 @@ function parseFlightTime(flight, type, preferActual) {
   return { hour: +m[4], minute: +m[5], dow };
 }
 
-function buildStatusHeat(flights, type, excludedDates, threshold, wantDelay) {
+function buildStatusHeat(flights, excludedDates, threshold, wantDelay) {
   const targetStatus = wantDelay ? 'Задержан' : 'Отмена';
   const cells = new Map(); // key: dow*24 + hour → { total, matched }
   let fallbackCount = 0;
   for (const f of flights) {
-    if (excludedDates.has(f._fileDate)) continue;
-    // Группировка по плановому времени (STD/STA); при отсутствии используется фактическое (ATD/ATA)
-    const t = parseFlightTime(f, type, false);
+    if (excludedDates.has(f.fileDate)) continue;
+    // Группировка по плановому времени (STD/STA); при отсутствии — фактическое (ATD/ATA)
+    const t = parseFlightTime(f, false);
     if (!t) continue;
-    if (!f[KEY_PLAN[type]]) fallbackCount++;
+    if (!f.plan) fallbackCount++;
     const key = t.dow * 24 + t.hour;
     let cell = cells.get(key);
     if (!cell) {
@@ -628,7 +510,7 @@ function buildStatusHeat(flights, type, excludedDates, threshold, wantDelay) {
       cells.set(key, cell);
     }
     cell.total++;
-    if (effectiveStatus(f, type, threshold).trim() === targetStatus) cell.matched++;
+    if (effectiveStatus(f, threshold).trim() === targetStatus) cell.matched++;
   }
 
   const data = [];
@@ -781,10 +663,17 @@ function createHeatmap(canvas, data, label) {
 }
 
 // === Preact-компоненты ===
-const Header = ({ info, status, statusError }) => html`
+const UnitSelect = ({ units, value, onChange }) => html`
+  <select class="unit-select" value=${value || ''} onChange=${e => onChange(e.target.value)}>
+    ${units.map(u => html`<option value=${u.code}>${u.name} (${u.code})</option>`)}
+  </select>
+`;
+
+const Header = ({ info, status, statusError, units, unitCode, onUnitChange }) => html`
   <header>
-    <h1>Статистика рейсов аэропорта Пулково<small>${info}</small></h1>
+    <h1>Статистика рейсов аэропорта<small>${info}</small></h1>
     <div class="header-actions">
+      ${units.length > 0 && html`<${UnitSelect} units=${units} value=${unitCode} onChange=${onUnitChange}></${UnitSelect}>`}
       <div class="status-bar ${statusError ? 'error' : ''}">${status}</div>
     </div>
   </header>
@@ -866,7 +755,7 @@ const FetchErrors = ({ failedDays, fallbackDep = 0, fallbackArr = 0 }) => {
       ${hasFailed && html`
         <ul>
           ${failedDays.map(d => html`
-            <li><strong>${fmtLogDate(d.date)}</strong>${d.errors.map(t => html`<span class="err-tag">${errTagText(t)}</span>`)}</li>
+            <li><strong>${fmtLogDate(d.date)}</strong>${d.types.map(t => html`<span class="err-tag">${errTagText(t)}</span>`)}</li>
           `)}
         </ul>
       `}
@@ -956,20 +845,27 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
   }, [onClose]);
 
   const rows = flights
-    .filter(f => actualDate(f, type) === date)
+    .filter(f => f.eventDate === date)
     .map(f => {
-      const planRaw = f[KEY_PLAN[type]] || '';
-      const actRaw = f[KEY_ACTUAL[type]] || '';
+      const planRaw = f.plan || '';
+      const actRaw = f.actual || '';
+      const status = effectiveStatus(f, threshold); // канонический статус (для цвета/сортировки/группировки)
+      // В тексте показываем исходный статус с сайта аэропорта (УФА: «Вылетел»,
+      // «Задержка», «Отменен» и т.п.), иначе — канонический статус.
+      const rawText = typeof f.statusRaw === 'string' && f.statusRaw.trim() !== ''
+        ? f.statusRaw.trim()
+        : status;
       return {
         f,
-        label: flightLabel(f, type),
-        dir: flightDir(f, type),
+        label: flightLabel(f),
+        dir: flightDir(f),
         plan: planRaw,
         act: actRaw,
         planDate: fmtDate(planRaw),
         actDate: fmtDate(actRaw),
-        delay: delayMinutes(f, type),
-        status: effectiveStatus(f, type, threshold)
+        delay: delayMinutes(f),
+        status,
+        text: rawText
       };
     });
 
@@ -1042,7 +938,7 @@ const FlightsPopup = ({ type, date, flights, onClose, threshold }) => {
                         ${timeCell(r.act, r.planDate)}
                         ${r.delay !== null && r.delay > 0 && html`<span class="delay"> +${fmtDelay(r.delay)}</span>`}
                       </td>
-                      <td><span class="status-badge" style="background:${color}22;color:${color}">${r.status}</span></td>
+                      <td><span class="status-badge" style="background:${color}22;color:${color}">${r.text}</span></td>
                     </tr>
                   `;
                 })}
@@ -1137,7 +1033,7 @@ const StatsTable = ({ agg, title, subtitle, onDateClick }) => {
 };
 
 const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricChange }) => {
-  const { aggDep, aggArr, heatDep, heatArr, logFailDays, flightsDep, flightsArr } = data;
+  const { aggDep, aggArr, heatDep, heatArr, fetchErrors, flightsDep, flightsArr } = data;
   const [popup, setPopup] = useState(null);
 
   const openPopup = (type, date) => setPopup({ type, date });
@@ -1146,7 +1042,7 @@ const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricC
   return html`
   <div>
       <${SummaryCards} aggDep=${aggDep} aggArr=${aggArr}></${SummaryCards}>
-      <${FetchErrors} failedDays=${logFailDays} fallbackDep=${heatDep.fallbackCount} fallbackArr=${heatArr.fallbackCount}></${FetchErrors}>
+      <${FetchErrors} failedDays=${fetchErrors} fallbackDep=${heatDep.fallbackCount} fallbackArr=${heatArr.fallbackCount}></${FetchErrors}>
       <${ThresholdSelect} value=${threshold} onChange=${onThresholdChange}></${ThresholdSelect}>
 
       <div class="charts-grid">
@@ -1212,38 +1108,43 @@ const App = () => {
   const [base, setBase] = useState(null);
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
   const [heatMetric, setHeatMetric] = useState('cancel');
+  const [units, setUnits] = useState([]);
+  const [unitCode, setUnitCode] = useState(null);
 
+  // Загружаем список аэропортов один раз при старте
   useEffect(() => {
     let cancelled = false;
+    (async () => {
+      try {
+        const list = await loadUnits();
+        if (cancelled) return;
+        setUnits(list);
+        if (list.length > 0) setUnitCode(list[0].code);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setError('Не удалось получить список аэропортов: ' + err.message);
+        setPhase('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Загружаем данные выбранного аэропорта
+  useEffect(() => {
+    if (!unitCode) return;
+    let cancelled = false;
+    setPhase('loading');
+    setStatus('Загружаем данные с сервера…');
+    setStatusError(false);
 
     (async () => {
       try {
-        setStatus('Получаем список файлов…');
-        const files = await fetchList();
+        const result = await loadUnitData(unitCode);
         if (cancelled) return;
 
-        setStatus(`Найдено ${files.length} файлов. Загружаем JSON и лог…`);
-        const [dep, arr, logFailDays] = await Promise.all([
-          loadType(files, 'departure'),
-          loadType(files, 'arrival'),
-          loadFetchLog()
-        ]);
-        if (cancelled) return;
-
-        const excludedDep = getExcludedDates(logFailDays, dep);
-        const excludedArr = getExcludedDates(logFailDays, arr);
-
-        const warnParts = [];
-        if (dep.errors) warnParts.push(`вылеты: ${dep.errors}/${dep.total} файлов не загружено`);
-        if (arr.errors) warnParts.push(`прилёты: ${arr.errors}/${arr.total} файлов не загружено`);
-
-        setStatusError(warnParts.length > 0);
-        setStatus(warnParts.length
-          ? '⚠ ' + warnParts.join('; ')
-          : `Готово: ${dep.total} + ${arr.total} файлов, ${dep.flights.length + arr.flights.length} рейсов обработано`
-        );
-
-        setBase({ dep, arr, logFailDays, excludedDep, excludedArr });
+        setStatus(`Готово: ${result.departures.length + result.arrivals.length} рейсов загружено`);
+        setBase(result);
         setPhase('ready');
       } catch (err) {
         if (cancelled) return;
@@ -1255,24 +1156,25 @@ const App = () => {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [unitCode]);
 
   const data = useMemo(() => {
     if (!base) return null;
-    const { dep, arr, logFailDays, excludedDep, excludedArr } = base;
+    const { departures, arrivals, fetchErrors } = base;
+    const { excludedDep, excludedArr } = getExcludedDates(fetchErrors);
     return {
-      aggDep: aggregate(dep.flights, 'departure', threshold),
-      aggArr: aggregate(arr.flights, 'arrival', threshold),
-      heatDep: buildStatusHeat(dep.flights, 'departure', excludedDep, threshold, heatMetric === 'delay'),
-      heatArr: buildStatusHeat(arr.flights, 'arrival', excludedArr, threshold, heatMetric === 'delay'),
-      logFailDays,
-      flightsDep: dep.flights,
-      flightsArr: arr.flights
+      aggDep: aggregate(departures, threshold),
+      aggArr: aggregate(arrivals, threshold),
+      heatDep: buildStatusHeat(departures, excludedDep, threshold, heatMetric === 'delay'),
+      heatArr: buildStatusHeat(arrivals, excludedArr, threshold, heatMetric === 'delay'),
+      fetchErrors,
+      flightsDep: departures,
+      flightsArr: arrivals
     };
   }, [base, threshold, heatMetric]);
 
   useEffect(() => {
-    if (!base) return;
+    if (!base || !data) return;
     const { aggDep, aggArr } = data;
     const now = new Date();
     setHeaderInfo(
@@ -1282,7 +1184,14 @@ const App = () => {
 
   return html`
     <div class="container">
-      <${Header} info=${headerInfo} status=${status} statusError=${statusError}></${Header}>
+      <${Header}
+        info=${headerInfo}
+        status=${status}
+        statusError=${statusError}
+        units=${units}
+        unitCode=${unitCode}
+        onUnitChange=${setUnitCode}
+      ></${Header}>
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
       ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold} heatMetric=${heatMetric} onHeatMetricChange=${setHeatMetric}></${Content}>`}
       ${phase === 'error' && html`<${ErrorState} message=${error}></${ErrorState}>`}

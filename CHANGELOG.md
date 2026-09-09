@@ -1,6 +1,19 @@
 # Changelog
 
+## 2026-09-09 — On server start, daily "yesterday" units (LED, OVB) now immediately fetch missing data for yesterday instead of waiting for FETCH_HOUR, avoiding a lost day after overnight downtime.
+## 2026-09-08 — Added Tolmachevo (OVB) airport: daily "yesterday" collection through headless Chromium (playwright-core) to bypass the site's JS cookie challenge; parses mixed arrival/departure HTML cards and treats "yesterday" in Asia/Novosibirsk; fetcher now supports units that fetch via a browser (fetchRawHtml) and archive can store raw HTML as text.
+## 2026-09-08 — Store original airport status in a new DB column status_raw and added scripts/migrate-ufa-status.js to backfill existing UFA rows; the flight popup shows the original status.
+## 2026-09-08 — Normalized UFA flight statuses at parse time to the canonical LED set (Отправлен/Прибыл, Задержан, Отмена, Без статуса).
+
+## 2026-08-25 — Added .env support via dotenv for PORT; added .env/.env.example and added .env to .gitignore.
+## 2026-08-24 — Reworked npm scripts: renamed start to dev, added pm2-based start/stop/logs (pm2 as devDependency) and updated README accordingly.
+
+## 2026-08-23 — Added UFA airport (Ufa) with hourly schedule fetching current-day flights via POST and HTML parsing, accumulating by external ID; scheduler now runs per unit with per-unit retry settings.
+
+## 2026-08-23 — Rewrote project as a Node.js server (Express + better-sqlite3): built-in daily scheduler with retries replaces cron, added REST API serving only display-ready data, SQLite storage with raw JSON archived on disk, unit-based airport config for future multi-airport support, and an airport dropdown on the frontend; removed fetch_flights.sh and legacy JSON/log files in favor of a one-time migration script.
+
 ## 2026-08-23 — Fixed fetch_flights.sh saving JSON files to the script directory regardless of the working directory when run from cron.
+
 
 ## 2026-08-22 — Added summary cards showing total canceled/delayed departures and arrivals with percentages, computed using the selected delay threshold.
 

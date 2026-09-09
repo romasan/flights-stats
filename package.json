@@ -1,0 +1,31 @@
+{
+  "name": "flights-stats",
+  "version": "2.0.0",
+  "description": "Сервер и веб-приложение для сбора и визуализации статистики рейсов аэропортов",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "node server/index.js",
+    "start": "pm2 start server/index.js --name flights-stats && pm2 save",
+    "stop": "pm2 stop flights-stats",
+    "logs": "pm2 logs flights-stats",
+    "migrate": "node scripts/migrate-legacy.js",
+    "migrate:ufa-status": "node scripts/migrate-ufa-status.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.20.4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "compression": "^1.7.4",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "playwright-core": "1.57.0"
+  },
+  "devDependencies": {
+    "pm2": "^7.0.3"
+  }
+}
