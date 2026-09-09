@@ -7,8 +7,9 @@ const led = require('./led');
 const ufa = require('./ufa');
 const ovb = require('./ovb');
 const svo = require('./svo');
+const vko = require('./vko');
 
-const UNITS = [led, ufa, ovb, svo];
+const UNITS = [led, ufa, ovb, svo, vko];
 
 const byCode = new Map(UNITS.map(u => [u.code, u]));
 
