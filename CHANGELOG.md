@@ -1,5 +1,6 @@
 # Changelog
 
+## 2026-09-10 — Added URL routing: /<code>/ (e.g. /ufa/) opens an airport's stats, selecting an airport updates the address (pushState), direct links and back/forward work; /api/ untouched.
 ## 2026-09-10 — Removed the one-time migration npm scripts (migrate, migrate:ufa-status) and deleted scripts/migrate-legacy.js and scripts/migrate-ufa-status.js.
 ## 2026-09-10 — Added Sochi (AER): hourly plain-HTTP polling of the current-day Bitrix online board (aer.aero, HTML arrives without a browser), accumulating current-day flights by external ID (merge); selects arrival/departure by card class, takes planned time from row data-attributes and actual time only for completed flights from the dated "actual" row.
 ## 2026-09-10 — Added Domodedovo (DME): hourly plain-HTTP polling of the rolling live-board window, accumulating current-day flights by external ID (merge) into a full "yesterday" by day's end.

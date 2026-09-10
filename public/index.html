@@ -422,6 +422,20 @@ async function loadUnitData(code) {
   return resp.json();
 }
 
+// === Роутинг ===
+// Ссылки вида /<код аэропорта>/ (например /ufa/) — закладки на статистику
+// конкретного аэропорта. Корень сайта показывает аэропорт по умолчанию (Пулково).
+const UNIT_PATH_RE = /^\/([a-zA-Z]{3})\/?$/;
+
+function unitCodeFromPath() {
+  const m = window.location.pathname.match(UNIT_PATH_RE);
+  return m ? m[1].toUpperCase() : null;
+}
+
+function pathForUnit(code) {
+  return '/' + String(code).toLowerCase() + '/';
+}
+
 function getExcludedDates(fetchErrors) {
   const excludedDep = new Set();
   const excludedArr = new Set();
@@ -1111,7 +1125,8 @@ const App = () => {
   const [units, setUnits] = useState([]);
   const [unitCode, setUnitCode] = useState(null);
 
-  // Загружаем список аэропортов один раз при старте
+  // Загружаем список аэропортов один раз при старте и определяем аэропорт
+  // из адреса страницы (например /ufa/), иначе — аэропорт по умолчанию (Пулково).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1119,7 +1134,15 @@ const App = () => {
         const list = await loadUnits();
         if (cancelled) return;
         setUnits(list);
-        if (list.length > 0) setUnitCode(list[0].code);
+
+        const fromPath = unitCodeFromPath();
+        if (fromPath && !list.some(u => u.code === fromPath)) {
+          setError(`Неизвестный аэропорт: ${fromPath}`);
+          setHeaderInfo('не удалось загрузить данные');
+          setPhase('error');
+          return;
+        }
+        setUnitCode(fromPath || (list[0] && list[0].code) || null);
       } catch (err) {
         if (cancelled) return;
         console.error(err);
@@ -1182,6 +1205,38 @@ const App = () => {
     );
   }, [data]);
 
+  // Показываем название аэропорта в заголовке вкладки браузера.
+  useEffect(() => {
+    if (base && base.unit) {
+      document.title = `${base.unit.name} (${base.unit.code}) — статистика рейсов`;
+    }
+  }, [base]);
+
+  // Навигация браузера «назад/вперёд» — синхронизируем выбранный аэропорт с адресом.
+  useEffect(() => {
+    const onPopState = () => {
+      const code = unitCodeFromPath();
+      if (code) {
+        if (units.some(u => u.code === code)) setUnitCode(code);
+      } else if (units.length > 0) {
+        // Вернулись в корень сайта — показываем аэропорт по умолчанию (Пулково).
+        setUnitCode(units[0].code);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [units]);
+
+  // Выбор аэропорта: обновляем состояние и адрес страницы (/<код>/),
+  // чтобы ссылку можно было скопировать или сохранить в закладки.
+  const handleUnitChange = code => {
+    setUnitCode(code);
+    const path = pathForUnit(code);
+    if (window.location.pathname !== path) {
+      window.history.pushState({ unitCode: code }, '', path);
+    }
+  };
+
   return html`
     <div class="container">
       <${Header}
@@ -1190,7 +1245,7 @@ const App = () => {
         statusError=${statusError}
         units=${units}
         unitCode=${unitCode}
-        onUnitChange=${setUnitCode}
+        onUnitChange=${handleUnitChange}
       ></${Header}>
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
       ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold} heatMetric=${heatMetric} onHeatMetricChange=${setHeatMetric}></${Content}>`}
