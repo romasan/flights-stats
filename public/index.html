@@ -343,8 +343,13 @@ const timeCell = (s, otherDate) => {
 const flightLabel = f => (f.flightNumber || '').trim();
 
 const flightDir = f => {
-  if (!f.airportCode && !f.airportName) return '—';
-  return f.airportName ? `${f.airportCode} · ${f.airportName}` : f.airportCode;
+  // Некоторые табло (Толмачёво, Сочи, Домодедово) отдают только название
+  // города без IATA-кода аэропорта, поэтому показываем то, что доступно,
+  // и не рискуем вывести «null · Город».
+  const code = String(f.airportCode == null ? '' : f.airportCode).trim();
+  const name = String(f.airportName == null ? '' : f.airportName).trim();
+  if (!code && !name) return '—';
+  return code && name ? `${code} · ${name}` : (name || code);
 };
 
 const delayMinutes = f => {
