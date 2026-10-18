@@ -28,6 +28,8 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
+const { requestText } = require('../http');
+
 const BOARD_URL = 'https://aer.aero/flights/online-schedule/';
 
 const pad2 = n => String(n).padStart(2, '0');
@@ -124,26 +126,15 @@ module.exports = {
   // Обычный GET к странице онлайн-табло (HTML отдаётся сразу, без челленджа).
   // Ответ содержит и вылеты, и прилёты; нужное направление отбирает parseFlights.
   async fetchRawHtml(type, fileDate) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30_000);
-    try {
-      const resp = await fetch(BOARD_URL, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept-Language': 'ru-RU,ru;q=0.9'
-        },
-        signal: controller.signal
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const html = await resp.text();
-      if (typeof html !== 'string' ||
-          html.indexOf('main-widget__content__item-block') === -1) {
-        throw new Error('Ответ AER не похож на онлайн-табло');
-      }
-      return html;
-    } finally {
-      clearTimeout(timer);
+    const html = await requestText(
+      { url: BOARD_URL, headers: { 'Accept-Language': 'ru-RU,ru;q=0.9' } },
+      USER_AGENT
+    );
+    if (typeof html !== 'string' ||
+        html.indexOf('main-widget__content__item-block') === -1) {
+      throw new Error('Ответ AER не похож на онлайн-табло');
     }
+    return html;
   },
 
   // Разбирает строки рейсов из HTML табло и оставляет только рейсы нужного

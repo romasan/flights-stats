@@ -28,6 +28,8 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
+const { requestText } = require('../http');
+
 const BOARD_URL = 'https://www.dme.ru/flight/live-board/';
 
 // Сокращения русских месяцев («сен» ← «сентября» и т.п.) → номер месяца.
@@ -120,25 +122,14 @@ module.exports = {
   async fetchRawHtml(type, fileDate) {
     const direction = type === 'arrival' ? 'A' : 'D';
     const url = `${BOARD_URL}?column=4&sort=1&direction=${direction}&page=1`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30_000);
-    try {
-      const resp = await fetch(url, {
-        headers: {
-          'User-Agent': UA,
-          'Accept-Language': 'ru-RU,ru;q=0.9'
-        },
-        signal: controller.signal
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const html = await resp.text();
-      if (typeof html !== 'string' || html.indexOf('class="table_style_3') === -1) {
-        throw new Error('Ответ DME не похож на онлайн-табло');
-      }
-      return html;
-    } finally {
-      clearTimeout(timer);
+    const html = await requestText(
+      { url, headers: { 'Accept-Language': 'ru-RU,ru;q=0.9' } },
+      UA
+    );
+    if (typeof html !== 'string' || html.indexOf('class="table_style_3') === -1) {
+      throw new Error('Ответ DME не похож на онлайн-табло');
     }
+    return html;
   },
 
   // Разбирает строки рейсов из HTML окна табло и оставляет только рейсы

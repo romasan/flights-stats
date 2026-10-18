@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-10-18 — Fixed LED failing since 10-12: new GlobalSign R46 TLS chain missing from Node CAs; added server/http.js loading extra CAs from server/certs/.
+
 ## 2026-09-10 — Fixed flight popup direction showing "null · City" for boards without an IATA code (OVB, AER, DME): now only the city name is shown.
 ## 2026-09-10 — Added URL routing: /<code>/ (e.g. /ufa/) opens an airport's stats, selecting an airport updates the address (pushState), direct links and back/forward work; /api/ untouched.
 ## 2026-09-10 — Removed the one-time migration npm scripts (migrate, migrate:ufa-status) and deleted scripts/migrate-legacy.js and scripts/migrate-ufa-status.js.

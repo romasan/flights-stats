@@ -2,24 +2,10 @@
 
 const archive = require('./archive');
 const store = require('./store');
-
-const FETCH_TIMEOUT_MS = 30_000;
+const { requestJson } = require('./http');
 
 async function fetchResponse(request, userAgent) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const resp = await fetch(request.url, {
-      method: request.method || 'GET',
-      headers: Object.assign({ 'User-Agent': userAgent }, request.headers || {}),
-      body: request.body,
-      signal: controller.signal
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } finally {
-    clearTimeout(timer);
-  }
+  return requestJson(request, userAgent);
 }
 
 /**
