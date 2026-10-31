@@ -252,6 +252,44 @@
   }
   .threshold-bar select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
   .threshold-hint { font-size: 12px; color: #64748b; }
+  .range-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .range-bar .range-label { color: #475569; font-weight: 600; }
+  .range-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .range-btn {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+    cursor: pointer;
+  }
+  .range-btn:hover { background: #eef2f7; }
+  .range-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .range-bar input[type="date"] {
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+  }
+  .range-bar input[type="date"]:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+  .range-bar .range-sep { color: #64748b; }
+  .range-bar .range-hint { font-size: 12px; color: #64748b; }
   .day-link {
     color: #2563eb;
     cursor: pointer;
@@ -328,6 +366,19 @@ const fmtDisplayDate = d => {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
 };
+
+// Сдвиг ISO-даты (YYYY-MM-DD) на N дней.
+const isoShiftDays = (iso, days) => {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+// YYYYMMDD (как в fetch_log) → YYYY-MM-DD
+const ymdToIso = s => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+
+// Длина периода по умолчанию: последние 30 дней (включая последний день).
+const DEFAULT_RANGE_DAYS = 30;
 
 const timeCell = (s, otherDate) => {
   const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
@@ -811,6 +862,43 @@ const HeatSelect = ({ value, onChange }) => html`
   </div>
 `;
 
+// Пресеты периода. Все диапазоны считаются от последней даты в данных,
+// а не от «сегодня»: данные за сегодня ещё неполные.
+const RANGE_PRESETS = [
+  { key: '30', label: '30 дней', days: 30 },
+  { key: '90', label: '90 дней', days: 90 },
+  { key: '365', label: 'Год', days: 365 }
+];
+
+const RangeSelect = ({ value, onChange, minDate, maxDate, activeKey, start, end }) => {
+  const setFrom = e => onChange({ preset: 'custom', from: e.target.value || minDate, to: end || maxDate });
+  const setTo = e => onChange({ preset: 'custom', from: start || minDate, to: e.target.value || maxDate });
+  return html`
+    <div class="range-bar">
+      <span class="range-label">Период:</span>
+      <div class="range-btns">
+        ${RANGE_PRESETS.map(p => html`
+          <button
+            class="range-btn ${activeKey === p.key ? 'active' : ''}"
+            onClick=${() => onChange({ preset: p.key })}
+          >${p.label}</button>
+        `)}
+        <button
+          class="range-btn ${activeKey === 'all' ? 'active' : ''}"
+          onClick=${() => onChange({ preset: 'all' })}
+        >Всё время</button>
+      </div>
+      <span class="range-sep">с</span>
+      <input type="date" value=${start || ''} min=${minDate || ''} max=${maxDate || ''} onInput=${setFrom}></input>
+      <span class="range-sep">по</span>
+      <input type="date" value=${end || ''} min=${minDate || ''} max=${maxDate || ''} onInput=${setTo}></input>
+      <span class="range-hint">
+        ${activeKey === 'all' ? 'показаны все дни' : 'по умолчанию — последние 30 дней'}
+      </span>
+    </div>
+  `;
+};
+
 const LineChart = ({ agg }) => {
   const ref = useRef(null);
   useEffect(() => {
@@ -1051,7 +1139,7 @@ const StatsTable = ({ agg, title, subtitle, onDateClick }) => {
   `;
 };
 
-const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricChange }) => {
+const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricChange, range, onRangeChange, rangeInfo }) => {
   const { aggDep, aggArr, heatDep, heatArr, fetchErrors, flightsDep, flightsArr } = data;
   const [popup, setPopup] = useState(null);
 
@@ -1060,6 +1148,15 @@ const Content = ({ data, threshold, onThresholdChange, heatMetric, onHeatMetricC
 
   return html`
   <div>
+      <${RangeSelect}
+        value=${range}
+        onChange=${onRangeChange}
+        minDate=${rangeInfo.minDate}
+        maxDate=${rangeInfo.maxDate}
+        activeKey=${rangeInfo.activeKey}
+        start=${rangeInfo.start}
+        end=${rangeInfo.end}
+      ></${RangeSelect}>
       <${SummaryCards} aggDep=${aggDep} aggArr=${aggArr}></${SummaryCards}>
       <${FetchErrors} failedDays=${fetchErrors} fallbackDep=${heatDep.fallbackCount} fallbackArr=${heatArr.fallbackCount}></${FetchErrors}>
       <${ThresholdSelect} value=${threshold} onChange=${onThresholdChange}></${ThresholdSelect}>
@@ -1129,6 +1226,9 @@ const App = () => {
   const [heatMetric, setHeatMetric] = useState('cancel');
   const [units, setUnits] = useState([]);
   const [unitCode, setUnitCode] = useState(null);
+  // Выбранный период: { preset: '30'|'90'|'365'|'all'|'custom', from, to }.
+  // По умолчанию — последние 30 дней от последней даты в данных.
+  const [range, setRange] = useState({ preset: String(DEFAULT_RANGE_DAYS) });
 
   // Загружаем список аэропортов один раз при старте и определяем аэропорт
   // из адреса страницы (например /ufa/), иначе — аэропорт по умолчанию (Пулково).
@@ -1201,14 +1301,69 @@ const App = () => {
     };
   }, [base, threshold, heatMetric]);
 
+  // Границы данных и разрешённый выбранный интервал.
+  // Всё считается от последней даты в данных: сегодняшний день обычно неполный.
+  const rangeInfo = useMemo(() => {
+    if (!base) return { minDate: null, maxDate: null, activeKey: null };
+    const dates = [];
+    for (const f of base.departures) if (f.eventDate) dates.push(f.eventDate);
+    for (const f of base.arrivals) if (f.eventDate) dates.push(f.eventDate);
+    dates.sort();
+    const minDate = dates[0] || null;
+    const maxDate = dates[dates.length - 1] || null;
+
+    let activeKey = range.preset || 'custom';
+    let start = minDate;
+    let end = maxDate;
+    if (activeKey === 'custom') {
+      start = range.from || minDate;
+      end = range.to || maxDate;
+    } else if (activeKey !== 'all' && maxDate) {
+      const days = +activeKey;
+      if (Number.isFinite(days) && days > 0) start = isoShiftDays(maxDate, -(days - 1));
+    }
+    if (start && minDate && start < minDate) start = minDate;
+    if (end && maxDate && end > maxDate) end = maxDate;
+    if (start && end && start > end) start = end;
+    return { minDate, maxDate, start, end, activeKey };
+  }, [base, range]);
+
+  // Применяем выбранный интервал ко всем графикам, тепловым картам и таблицам.
+  const viewData = useMemo(() => {
+    if (!data) return null;
+    const { start, end } = rangeInfo;
+    if (!start || !end) return data;
+    const inRange = f => f.eventDate && f.eventDate >= start && f.eventDate <= end;
+    const departures = data.flightsDep.filter(inRange);
+    const arrivals = data.flightsArr.filter(inRange);
+    const { excludedDep, excludedArr } = getExcludedDates(data.fetchErrors);
+    return {
+      ...data,
+      aggDep: aggregate(departures, threshold),
+      aggArr: aggregate(arrivals, threshold),
+      heatDep: buildStatusHeat(departures, excludedDep, threshold, heatMetric === 'delay'),
+      heatArr: buildStatusHeat(arrivals, excludedArr, threshold, heatMetric === 'delay'),
+      // Ошибки загрузки показываем только за видимый период.
+      fetchErrors: data.fetchErrors.filter(e => {
+        const iso = ymdToIso(e.date);
+        return iso >= start && iso <= end;
+      }),
+      flightsDep: departures,
+      flightsArr: arrivals
+    };
+  }, [data, rangeInfo, threshold, heatMetric]);
+
   useEffect(() => {
-    if (!base || !data) return;
-    const { aggDep, aggArr } = data;
+    if (!base || !viewData) return;
+    const { aggDep, aggArr } = viewData;
     const now = new Date();
+    const span = rangeInfo.start && rangeInfo.end
+      ? ` · ${fmtDisplayDate(rangeInfo.start)}–${fmtDisplayDate(rangeInfo.end)}`
+      : '';
     setHeaderInfo(
-      `данные за ${aggDep.dates.length} дней вылетов и ${aggArr.dates.length} дней прилётов · обновлено ${now.toLocaleString('ru-RU')}`
+      `данные за ${aggDep.dates.length} дней вылетов и ${aggArr.dates.length} дней прилётов${span} · обновлено ${now.toLocaleString('ru-RU')}`
     );
-  }, [data]);
+  }, [viewData, rangeInfo]);
 
   // Показываем название аэропорта в заголовке вкладки браузера.
   useEffect(() => {
@@ -1242,6 +1397,12 @@ const App = () => {
     }
   };
 
+  // Смена периода: пресет сбрасывает ручные даты, ручная дата переводит в режим custom.
+  const handleRangeChange = next => {
+    if (next.preset && next.preset !== 'custom') setRange({ preset: next.preset });
+    else setRange({ preset: 'custom', from: next.from || null, to: next.to || null });
+  };
+
   return html`
     <div class="container">
       <${Header}
@@ -1253,7 +1414,16 @@ const App = () => {
         onUnitChange=${handleUnitChange}
       ></${Header}>
       ${phase === 'loading' && html`<${Loader}></${Loader}>`}
-      ${phase === 'ready' && data && html`<${Content} data=${data} threshold=${threshold} onThresholdChange=${setThreshold} heatMetric=${heatMetric} onHeatMetricChange=${setHeatMetric}></${Content}>`}
+      ${phase === 'ready' && viewData && html`<${Content}
+        data=${viewData}
+        threshold=${threshold}
+        onThresholdChange=${setThreshold}
+        heatMetric=${heatMetric}
+        onHeatMetricChange=${setHeatMetric}
+        range=${range}
+        onRangeChange=${handleRangeChange}
+        rangeInfo=${rangeInfo}
+      ></${Content}>`}
       ${phase === 'error' && html`<${ErrorState} message=${error}></${ErrorState}>`}
     </div>
   `;

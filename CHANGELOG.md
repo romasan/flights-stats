@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-10-31 — Default time range is now the last 30 days instead of the whole history; added a period bar with presets (30 days, 90 days, year, all time) and a custom range picked with two date inputs, clamped to the actual data bounds and applied to summary cards, charts, heatmaps, tables, flight popups and fetch-error warnings.
+
 ## 2026-10-18 — Fixed LED failing since 10-12: new GlobalSign R46 TLS chain missing from Node CAs; added server/http.js loading extra CAs from server/certs/.
 
 ## 2026-09-10 — Fixed flight popup direction showing "null · City" for boards without an IATA code (OVB, AER, DME): now only the city name is shown.
