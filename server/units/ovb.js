@@ -219,7 +219,11 @@ async function closeSession() {
   }
   if (_browser) {
     try {
-      await _browser.close();
+      // close() может зависнуть на «залипшем» renderer'е — не ждём вечно
+      await Promise.race([
+        _browser.close(),
+        new Promise((resolve) => setTimeout(resolve, 8000))
+      ]);
     } catch (e) { /* не критично */ }
   }
   _browser = null;
@@ -230,8 +234,16 @@ async function closeSession() {
 function armIdleClose() {
   if (_idleTimer) clearTimeout(_idleTimer);
   _idleTimer = setTimeout(() => {
-    if (_browser && Date.now() - _sessAt > IDLE_CLOSE_MS) {
+    if (!_browser) {
+      _idleTimer = null;
+      return;
+    }
+    if (Date.now() - _sessAt > IDLE_CLOSE_MS) {
       closeSession().catch(() => {});
+    } else {
+      // сессию ещё использовали — планируем следующую проверку, иначе
+      // таймер умирает и браузер остаётся висеть навсегда
+      armIdleClose();
     }
   }, IDLE_CLOSE_MS + 1000);
   if (_idleTimer.unref) _idleTimer.unref();
